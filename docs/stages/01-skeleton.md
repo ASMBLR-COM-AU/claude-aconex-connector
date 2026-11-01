@@ -20,7 +20,7 @@ Aconex or holds any secret.
 
 - [x] Tests pass: the menu holds only `ping`, `ping` answers, `/health` answers,
       and an unknown address is refused.
-- [ ] Deployed on Fly and `https://<app>.fly.dev/health` answers.
+- [x] Deployed on Fly and `https://<app>.fly.dev/health` answers (GitHub deploy, 1 Nov 2026).
 - [x] No keys anywhere.
 
 ## Decisions
