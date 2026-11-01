@@ -25,4 +25,6 @@ The menu Claude sees is at `/mcp`; `/health` says whether it's running.
 
 ## Deploy
 
-Runs on Fly.io (see `fly.toml`): `fly deploy`.
+Runs on Fly.io (see `fly.toml`). GitHub deploys it automatically whenever
+`main` changes and the tests pass, using the `FLY_API_TOKEN` repository secret
+(a deploy token for this one Fly app).
