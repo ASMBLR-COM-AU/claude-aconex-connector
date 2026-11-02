@@ -3,7 +3,8 @@
 What the gateway will let Claude do in Aconex, chosen on 2 November 2026 from
 every feature in Oracle's Aconex API guides (89 features, about 750 API calls).
 
-- **45 need now, 9 later, 35 don't need** (mark read/unread dropped after review).
+- **43 need now, 9 later, 37 don't need** (mark read/unread dropped after review; logos and
+  related documents dropped after stage 5: logos' address doesn't exist, and nobody uses related documents).
 - **Login:** one service account (see PLAN.md).
 - Anything not listed as "Need now" or "Later" is not built. If it's not on
   the gateway's menu, Claude can't do it.

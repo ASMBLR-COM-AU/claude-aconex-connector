@@ -115,10 +115,6 @@ INTEGRITY = b"""<DocumentIntegrity>
   <Document DocumentId="9002" LastModifiedDate="2026-10-31T03:00:00Z"/>
 </DocumentIntegrity>"""
 
-RELATIONSHIP_CHANGES = [{"documentId": "9001", "relatedDocumentId": "9002", "action": "CREATED"}]
-
-LOGO = b"\x89PNG\r\n\x1a\nfake-logo"
-
 
 class FakeAconex:
     def __init__(self) -> None:
@@ -135,8 +131,6 @@ class FakeAconex:
             ("GET", "/organizations/88"): (COMPANY,),
             ("GET", "/projects/1001/projectField"): (PROJECT_FIELDS,),
             ("GET", "/mailinggroups/1001"): (MAILING_GROUPS,),
-            ("GET", "/project/logo"): (LOGO, "image/png"),
-            ("GET", "/organization/logo"): (LOGO, "image/png"),
             ("GET", "/projects/1001/register"): (REGISTER,),
             ("GET", "/projects/1001/drawings"): (REGISTER,),
             ("GET", "/projects/1001/register/schema"): (SCHEMA,),
@@ -146,7 +140,6 @@ class FakeAconex:
             ("POST", "/projects/1001/register/search"): (TRANSMITTALS,),
             ("GET", "/projects/1001/documents/savedSearch"): (SAVED_SEARCHES,),
             ("GET", "/projects/1001/register/integrity"): (INTEGRITY,),
-            ("GET", "/document-relationships/projects/1001/transactions"): (RELATIONSHIP_CHANGES,),
         }
 
     def handler(self, request: httpx.Request) -> httpx.Response:

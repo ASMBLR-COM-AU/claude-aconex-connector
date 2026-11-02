@@ -332,15 +332,3 @@ def register(server: MCPServer, gw: Gateway) -> None:
         if not changes and len(root):
             result["unread_reply_shape"] = shape(root)
         return result
-
-    @read_tool(server, gw, "Links between related documents that were added or removed in a date range. "
-                       "Aconex has no way to list every document related to one document.")
-    async def related_document_changes(project_id: str, since: str, until: str = "") -> dict:
-        start = parse_when(since, "since")
-        end = parse_when(until, "until") if until else datetime.now(timezone.utc)
-        params = {"from": start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                  "to": end.strftime("%Y-%m-%dT%H:%M:%S.000Z"), "page": 1}
-        data = await aconex.get_json(
-            f"/document-relationships/projects/{seg(project_id, 'project ID')}/transactions", params,
-            accept="*/*")
-        return {"changes": data}

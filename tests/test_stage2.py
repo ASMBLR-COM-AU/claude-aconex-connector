@@ -16,11 +16,11 @@ STAGE2_TOOLS = {
     # projects and people
     "list_projects", "search_project_directory", "get_person", "gateway_account",
     "list_mailing_groups", "search_aconex_directory", "get_company",
-    "list_project_fields", "get_logo",
+    "list_project_fields",
     # register
     "search_register", "revision_history", "document_details", "register_fields",
     "current_drawing_set_rule", "document_event_log", "document_transmittals",
-    "saved_register_searches", "documents_changed_since", "related_document_changes",
+    "saved_register_searches", "documents_changed_since",
 }
 
 
@@ -177,18 +177,6 @@ def test_company_and_project_fields():
     assert [f["label"] for f in fields["fields"]] == ["Building", "Level"]
 
 
-def test_logo_needs_exactly_one_target():
-    fake = FakeAconex()
-    assert call(fake, "get_logo", {})[0] is True
-    assert call(fake, "get_logo", {"project_id": "1001", "organization_id": "88"})[0] is True
-
-    async def run():
-        async with Client(build_server(fake.client())) as client:
-            return await client.call_tool("get_logo", {"project_id": "1001"})
-
-    result = anyio.run(run)
-    assert not result.is_error and result.content[0].type == "image"
-    assert fake.calls[-1]["params"] == {"projectid": "1001"}
 
 
 # ── register ────────────────────────────────────────────────────────
@@ -308,13 +296,6 @@ def test_bad_date_is_a_plain_message():
     assert is_error and "2026-11-01" in text and fake.calls == []
 
 
-def test_related_document_changes():
-    fake = FakeAconex()
-    _, data = call(fake, "related_document_changes",
-                   {"project_id": "1001", "since": "2026-10-01", "until": "2026-10-31"})
-    params = fake.calls[-1]["params"]
-    assert params["from"] == "2026-10-01T00:00:00.000Z" and params["to"] == "2026-10-31T00:00:00.000Z"
-    assert data["changes"][0]["action"] == "CREATED"
 
 
 # ── search know-how (docs/search-know-how.md) ───────────────────────

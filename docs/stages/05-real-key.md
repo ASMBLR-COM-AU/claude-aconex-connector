@@ -55,4 +55,5 @@ real project, read-only.
 - [x] The key appears nowhere but Fly secrets (start-up log shows only its shape).
 - [x] Every stage 2 tool tried against the real project; fixes deployed and
       re-checked.
-- [ ] Decide what to do with the three tools that don't work (see above).
+- [x] Decided (2 Nov 2026): logos and related-document changes dropped from the
+      menu; project custom fields kept for when the account has the permission.

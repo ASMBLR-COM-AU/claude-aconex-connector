@@ -17,7 +17,7 @@ register, tested against a fake Aconex. No real keys, no file downloads.
 
 Every tool is marked read-only, which Claude shows to the person using it.
 
-## The menu (19 tools, plus `ping`)
+## The menu (17 tools after stage 5, plus `ping`)
 
 | Tool | Feature in docs/features.md |
 |---|---|
@@ -29,7 +29,6 @@ Every tool is marked read-only, which Claude shows to the person using it.
 | `search_aconex_directory` | Search the Aconex-wide directory |
 | `get_company` | Look up a company |
 | `list_project_fields` | See a project's custom fields |
-| `get_logo` | Project and company logos |
 | `search_register` | Search the register, search inside documents, current drawing set |
 | `revision_history` | Revision history |
 | `document_details` | Document details |
@@ -39,7 +38,6 @@ Every tool is marked read-only, which Claude shows to the person using it.
 | `document_transmittals` | Which transmittals a document went out on |
 | `saved_register_searches` | Use saved register searches |
 | `documents_changed_since` | What's changed since a date |
-| `related_document_changes` | See related documents |
 
 ## Done when
 

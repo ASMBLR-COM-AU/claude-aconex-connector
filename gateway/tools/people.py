@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.server.mcpserver.utilities.types import Image
 
 from gateway.aconex import seg
 from gateway.aconex.parse import first, flatten, text
@@ -104,18 +103,3 @@ def register(server: MCPServer, gw: Gateway) -> None:
     async def list_project_fields(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/projectField")
         return {"fields": [flatten(f) for f in root][:200]}
-
-    @read_tool(server, gw, "A project's or a company's logo, as an image. Give exactly one of "
-                       "project_id or organization_id.")
-    async def get_logo(project_id: str = "", organization_id: str = "") -> Image:
-        if bool(project_id) == bool(organization_id):
-            raise ToolError("Give exactly one of project_id or organization_id.")
-        if project_id:
-            response = await aconex.get("/project/logo", {"projectid": seg(project_id, "project ID")},
-                                        accept="image/*")
-        else:
-            response = await aconex.get("/organization/logo",
-                                        {"organization_id": seg(organization_id, "organisation ID")},
-                                        accept="image/*")
-        kind = response.headers.get("content-type", "image/png").split(";")[0]
-        return Image(data=response.content, format=kind.split("/")[-1] or "png")
