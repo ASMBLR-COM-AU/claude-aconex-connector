@@ -239,8 +239,8 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
 
     @read_tool(server, gw,
                "Read one mail in full: sender, To/Cc/Bcc, type, subject, date, status, the message "
-               "text and its attachments (with IDs for get_mail_attachment, or a document_id for "
-               "get_document_file when it's a register document), 50 attachments at a time "
+               "text and its attachments (with attachment IDs for get_mail_attachment), 50 "
+               "attachments at a time "
                "(attachments_page for more). Give mail_number (e.g. LSGP-TRANSMIT-000143) or a "
                "mail_id from search_mail. A transmittal with thousands of attachments can take "
                "a minute to load.")
@@ -295,9 +295,10 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
         return {"saved_searches": parse_saved_searches(root)[:100]}
 
     @read_tool(server, gw,
-               "Get the actual file attached to a mail (local file attachments; for attached register "
-               "documents use get_document_file with their document_id). Use the attachment_id from "
-               "read_mail. marked_up=true gives the version with markups, as a PDF. Returns a "
+               "Get the actual file attached to a mail: any attachment, including attached drawings "
+               "and register documents (some come from another company's register and have no "
+               "document_id). Use the attachment_id from read_mail. marked_up=true gives the "
+               "version with markups, as a PDF. Returns a "
                "download link valid for 15 minutes: download it into your workspace and give the "
                "person the file in the chat; if you can't reach it, give them the link.")
     async def get_mail_attachment(project_id: str, attachment_id: str, mail_number: str = "",

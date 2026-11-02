@@ -32,9 +32,13 @@ From the user, 2 November 2026:
 - **Filter by mail type** (RFI, Transmittal, General Correspondence...).
 - **Free text** in the main search bar as well.
 
-Stage 7's mail search will take each of these as its own filter (box, from
-person, from company, recipient, mail type, words), explain them in its
-description, and give hints when nothing comes back. Known from the Aconex
+Built in stage 7 (`search_mail`): each is its own filter (box received/sent/all,
+from_person, from_company, to_person, mail_type, status, mail_number,
+since/until, words), explained in the tool's description, with hints when
+nothing comes back. Confirmed live 2 Nov 2026: sender's company and sender
+match on part of the name ("LVL", "Baysinger"); dates only match as
+`[YYYYMMDD TO YYYYMMDD]`; mail types and statuses search by ID, so the gateway
+looks the names up. Known from the Aconex
 skill's live testing:
 
 - There's no "since" filter: results are newest first and filtered as they come.
