@@ -107,6 +107,26 @@ def empty_search_tips(searched_inside: bool, with_history: bool, filtered: bool)
     return tips
 
 
+def parse_saved_searches(root) -> list:
+    """Saved searches (live shape, register and mail alike): groups holding
+    searches whose filters sit in a search query among paging and plumbing."""
+    searches = []
+    for group in root:
+        label = group.get("label") or text(group, "Label") or group.tag
+        for found in group.iter("SavedSearch"):
+            row = flatten(found, limit=150)
+            filters = {}
+            for key, value in row.items():
+                if ".search_query." not in key:
+                    continue
+                setting = key.rsplit(".", 1)[-1]
+                if setting not in SAVED_SEARCH_PLUMBING and value.strip().lower() not in SAVED_SEARCH_DEFAULTS:
+                    filters[setting] = value
+            searches.append({"group": label, "name": text(found, "Name"),
+                             "id": text(found, "Id"), "filters": filters})
+    return searches
+
+
 def register(server: MCPServer, gw: Gateway) -> None:
     aconex = gw.aconex
     schemas: dict[str, object] = {}
@@ -304,20 +324,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
                        "filters. Run one by passing its filters to search_register.")
     async def saved_register_searches(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/documents/savedSearch")
-        searches = []
-        for group in root:
-            label = group.get("label") or text(group, "Label") or group.tag
-            for found in group.iter("SavedSearch"):
-                row = flatten(found, limit=150)
-                filters = {}
-                for key, value in row.items():
-                    if ".search_query." not in key:
-                        continue
-                    setting = key.rsplit(".", 1)[-1]
-                    if setting not in SAVED_SEARCH_PLUMBING and value.strip().lower() not in SAVED_SEARCH_DEFAULTS:
-                        filters[setting] = value
-                searches.append({"group": label, "name": text(found, "Name"),
-                                 "id": text(found, "Id"), "filters": filters})
+        searches = parse_saved_searches(root)
         return {"saved_searches": searches[:100]}
 
     @read_tool(server, gw, "Documents that changed (or had something happen to them) since a date, "

@@ -124,6 +124,58 @@ PDF_HEADERS = {"content-type": "application/octet-stream",
                "content-disposition": "attachment; filename=\"S-1100%20Rev%20B.pdf\"; filename*=UTF-8''S-1100%20Rev%20B.pdf"}
 
 
+# Mail, in the live shapes seen on 2 Nov 2026. The company's own transmittal
+# (m8) sits in both received and sent, as it does live.
+def _mail_row(mail_id, number, sent, subject, name, org):
+    return (f'<Mail MailId="{mail_id}"><MailNo>{number}</MailNo><SentDate>{sent}</SentDate>'
+            f'<CorrespondenceType>Transmittal</CorrespondenceType><Subject>{subject}</Subject>'
+            f'<FromUserDetails><Name>{name}</Name><OrganizationName>{org}</OrganizationName></FromUserDetails></Mail>')
+
+
+INBOX = ('<MailSearch TotalResults="3" CurrentPage="1" TotalPages="1"><SearchResults>'
+         + _mail_row("m8", "asmblr-TRANSMIT-000008", "2026-08-11T01:00:00.000Z", "Transmittal Update", "Lachie Barnett", "ASMBLR")
+         + _mail_row("m2", "LSGP-TRANSMIT-000146", "2026-03-16T01:00:00.000Z", "FYI", "Michael Baysinger", "LVL Structures Group Pty Ltd")
+         + _mail_row("m1", "LSGP-TRANSMIT-000143", "2026-03-15T01:00:00.000Z", "Warrs Project Example", "Michael Baysinger", "LVL Structures Group Pty Ltd")
+         + "</SearchResults></MailSearch>").encode()
+SENTBOX = ('<MailSearch TotalResults="2"><SearchResults>'
+           + _mail_row("m8", "asmblr-TRANSMIT-000008", "2026-08-11T01:00:00.000Z", "Transmittal Update", "Lachie Barnett", "ASMBLR")
+           + _mail_row("m7", "asmblr-TRANSMIT-000007", "2026-05-31T01:00:00.000Z", "Transmittal #7", "Rev Radar", "ASMBLR")
+           + "</SearchResults></MailSearch>").encode()
+NO_MAIL = b'<MailSearch TotalResults="0"><SearchResults/></MailSearch>'
+
+MAIL_SCHEMA = b"""<SearchMailSchema>
+  <SchemaField><Identifier>fromtradingname</Identifier><Name>From Organization Name</Name></SchemaField>
+  <SchemaField><Identifier>corrtypeid</Identifier><Name>Mail Types</Name><SchemaValues>
+    <SchemaValue><Id>23</Id><Value>Transmittal</Value></SchemaValue></SchemaValues></SchemaField>
+  <SchemaField><Identifier>tostatusid</Identifier><Name>Status</Name><SchemaValues>
+    <SchemaValue><Id>2</Id><Value>Outstanding</Value></SchemaValue>
+    <SchemaValue><Id>5</Id><Value>Closed-Out</Value></SchemaValue></SchemaValues></SchemaField>
+  <SchemaField><Identifier>reasonforissueid</Identifier><Name>Reason for Issue</Name><SchemaValues>
+    <SchemaValue><Id>4</Id><Value>Issued for Information</Value></SchemaValue></SchemaValues></SchemaField>
+</SearchMailSchema>"""
+
+MAIL_DETAIL = b"""<Mail MailId="m1"><MailNo>LSGP-TRANSMIT-000143</MailNo>
+  <CorrespondenceType>Transmittal</CorrespondenceType><Subject>Warrs Project Example</Subject>
+  <SentDate>2026-03-15T01:00:00.000Z</SentDate><ReasonForIssue>Issued for Information</ReasonForIssue>
+  <ThreadId>t1</ThreadId>
+  <FromUserDetails><Name>Michael Baysinger</Name><OrganizationName>LVL Structures Group Pty Ltd</OrganizationName></FromUserDetails>
+  <ToUsers>
+    <Recipient><DistributionType>TO</DistributionType><Name>Lachie Barnett</Name><OrganizationName>ASMBLR</OrganizationName><UserId>u1</UserId></Recipient>
+    <Recipient><DistributionType>CC</DistributionType><Name>Rev Radar</Name><OrganizationName>ASMBLR</OrganizationName><UserId>u2</UserId></Recipient>
+  </ToUsers>
+  <MailData>&lt;p&gt;Hi Lachie,&lt;/p&gt;&lt;p&gt;Precast drawings attached.&amp;nbsp;Thanks&lt;/p&gt;</MailData>
+  <Attachments>
+    <RegisteredDocumentAttachment attachmentId="a9"><DocumentId>9001</DocumentId><DocumentNo>S-1100</DocumentNo><Revision>B</Revision><Title>Level 1 slab plan</Title><FileName>S-1100_B.pdf</FileName></RegisteredDocumentAttachment>
+    <LocalFileAttachment attachmentId="a1"><FileName>notes.pdf</FileName><FileSize>2048</FileSize></LocalFileAttachment>
+  </Attachments>
+</Mail>"""
+
+MAIL_THREAD = b"""<MailThread>
+  <Mail><MailNo>LSGP-TRANSMIT-000143</MailNo><Subject>Warrs Project Example</Subject><SentDate>2026-03-15T01:00:00.000Z</SentDate></Mail>
+  <Mail><MailNo>LSGP-TRANSMIT-000146</MailNo><Subject>RE: Warrs Project Example</Subject><SentDate>2026-03-16T01:00:00.000Z</SentDate></Mail>
+</MailThread>"""
+
+
 class FakeAconex:
     def __init__(self) -> None:
         self.calls: list[dict] = []
@@ -162,6 +214,26 @@ class FakeAconex:
             self.reject_next_token = False
             return httpx.Response(401, text="token expired")
         if request.method == "GET" and path == "/projects/1001/register/9001":
+            return httpx.Response(200, content=PDF, headers=PDF_HEADERS)
+        if request.method == "GET" and path == "/projects/1001/mail":
+            box = request.url.params.get("mail_box")
+            query = request.url.params.get("search_query", "")
+            if "NOMATCH" in query:
+                content = NO_MAIL
+            elif "LSGP-TRANSMIT-000143" in query:
+                content = INBOX if box == "Inbox" else NO_MAIL
+            else:
+                content = INBOX if box == "Inbox" else SENTBOX
+            return httpx.Response(200, content=content, headers={"content-type": "application/xml"})
+        mail_routes = {
+            "/projects/1001/mail/schema/search": MAIL_SCHEMA,
+            "/projects/1001/mail/m1": MAIL_DETAIL,
+            "/projects/1001/mail/t1/thread": MAIL_THREAD,
+            "/projects/1001/mail/savedSearches": SAVED_SEARCHES,
+        }
+        if request.method == "GET" and path in mail_routes:
+            return httpx.Response(200, content=mail_routes[path], headers={"content-type": "application/xml"})
+        if request.method == "GET" and path.startswith("/projects/1001/mail/m1/attachments/a1"):
             return httpx.Response(200, content=PDF, headers=PDF_HEADERS)
         query = request.url.params.get("search_query", "")
         if path == "/projects/1001/register" and ("1DG203" in query or "NOTHINGHERE" in query):

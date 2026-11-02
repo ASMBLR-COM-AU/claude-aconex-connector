@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 
 MAX_TEXT = 500  # longest single value passed back to Claude
 
@@ -97,3 +98,40 @@ def lucene_phrase(value: str) -> str:
     """Escape for a quoted Lucene phrase: only `"` and `\\` (live: escaping
     more breaks matching)."""
     return re.sub(r'(["\\])', r"\\\1", value)
+
+
+class _HTMLText(HTMLParser):
+    _BLOCKS = {"p", "div", "li", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6"}
+    _HIDDEN = {"style", "script", "head", "title"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list = []
+        self._hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._HIDDEN:
+            self._hidden += 1
+        elif tag in self._BLOCKS or tag == "br":
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self._HIDDEN:
+            self._hidden = max(0, self._hidden - 1)
+        elif tag in self._BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self._hidden:
+            self.parts.append(data)
+
+
+def html_to_text(markup: str) -> str:
+    """Mail bodies are HTML (live); plain text passes through unchanged."""
+    parser = _HTMLText()
+    parser.feed(markup)
+    parser.close()
+    out = "".join(parser.parts).replace("\xa0", " ")
+    out = re.sub(r"[ \t]+", " ", out)
+    out = re.sub(r" *\n *", "\n", out)
+    return re.sub(r"\n{3,}", "\n\n", out).strip()

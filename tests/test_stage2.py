@@ -23,6 +23,9 @@ STAGE2_TOOLS = {
     "saved_register_searches", "documents_changed_since",
     # stage 6
     "get_document_file",
+    # stage 7
+    "search_mail", "read_mail", "mail_thread", "mail_fields", "saved_mail_searches",
+    "get_mail_attachment",
 }
 
 

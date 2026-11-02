@@ -71,6 +71,8 @@ class FileLinks:
             return self._db.execute(sql, args).fetchall()
 
     def create(self, person: str, project: str, document: str, file_name: str) -> str:
+        """`document` is a register document ID, or the full Aconex path of
+        another file (e.g. a mail attachment), starting with "/"."""
         self._run("DELETE FROM file_links WHERE expires < ?", (time.time(),))
         token = secrets.token_urlsafe(32)
         self._run("INSERT INTO file_links VALUES (?, ?, ?, ?, ?, ?, 0)",
@@ -98,8 +100,9 @@ class FileLinks:
             return PlainTextResponse("This download isn't allowed any more.", 403)
         self._run("UPDATE file_links SET uses = uses + 1 WHERE hash = ?", (_hash(token),))
         try:
+            path = document if document.startswith("/") else document_path(project, document)
             content, name = await self.gw.aconex.get_file(
-                document_path(project, document), {"fileName": file_name} if file_name else None)
+                path, {"fileName": file_name} if file_name else None)
         except AconexError as err:
             audit("error", str(err))
             return PlainTextResponse(f"Couldn't get the file from Aconex: {err}", 502)
