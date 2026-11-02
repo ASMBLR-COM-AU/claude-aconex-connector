@@ -196,3 +196,20 @@ def test_a_refused_login_passes_on_aconex_reason():
         assert "invalid_client" in str(err) and "secret" not in str(err).split("Check")[0]
     else:
         raise AssertionError("expected an error")
+
+
+def test_combined_login_in_the_id_box_wins_over_whatever_is_in_the_secret_box(monkeypatch):
+    import base64 as b64
+    monkeypatch.setenv("ACONEX_CLIENT_ID", b64.b64encode(b"my-client:my-secret").decode())
+    monkeypatch.setenv("ACONEX_CLIENT_SECRET", "lachie@asmblr.com.au")
+    settings = Settings.from_env()
+    assert (settings.client_id, settings.client_secret) == ("my-client", "my-secret")
+
+
+def test_key_shape_never_shows_the_values(monkeypatch):
+    from gateway.aconex.client import describe_keys
+    monkeypatch.setenv("ACONEX_CLIENT_ID", "abc-client-123")
+    monkeypatch.setenv("ACONEX_CLIENT_SECRET", "super-secret-value")
+    shape = describe_keys()
+    assert "abc-client-123" not in shape and "super-secret-value" not in shape
+    assert "14 characters" in shape and "18 characters" in shape

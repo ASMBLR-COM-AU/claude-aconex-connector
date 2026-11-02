@@ -83,12 +83,12 @@ class Settings:
     def from_env(cls) -> "Settings":
         client_id, client_secret = _value("ACONEX_CLIENT_ID"), _value("ACONEX_CLIENT_SECRET")
         combined = _value("ACONEX_CREDENTIALS_B64") or _value("ACONEX_USERBOUND_CLIENT_CREDENTIALS_B64")
-        if not client_secret:
-            # The Aconex skill's keys can be one base64 value of "client_id:secret",
-            # and it sometimes ends up pasted where the client ID goes.
-            pair = _decode_pair(combined) or _decode_pair(client_id)
-            if pair:
-                client_id, client_secret = pair
+        # The Aconex skill's keys can be one base64 value of "client_id:secret".
+        # Use it when given on its own, or when it was pasted where the client
+        # ID goes (whatever is in the secret box is then not part of the login).
+        pair = _decode_pair(client_id) or (None if client_secret else _decode_pair(combined))
+        if pair:
+            client_id, client_secret = pair
         return cls(
             client_id=client_id,
             client_secret=client_secret,
@@ -97,6 +97,22 @@ class Settings:
             per_second=float(os.environ.get("ACONEX_PER_SECOND", "") or DEFAULT_PER_SECOND),
             at_once=int(os.environ.get("ACONEX_AT_ONCE", "") or DEFAULT_AT_ONCE),
         )
+
+
+def describe_keys() -> str:
+    """The shape of the Aconex keys in the environment, for diagnosing a
+    refused login. Never includes the values."""
+    parts = []
+    for name in ("ACONEX_CLIENT_ID", "ACONEX_CLIENT_SECRET", "ACONEX_CREDENTIALS_B64",
+                 "ACONEX_USERBOUND_CLIENT_CREDENTIALS_B64"):
+        value = _value(name)
+        if value:
+            kind = "a combined id:secret login" if _decode_pair(value) else "a plain value"
+            parts.append(f"{name}: {len(value)} characters, {kind}")
+    settings = Settings.from_env()
+    parts.append(f"login uses: client ID of {len(settings.client_id)} characters, "
+                 f"secret of {len(settings.client_secret)} characters")
+    return "; ".join(parts)
 
 
 def _value(name: str) -> str:
