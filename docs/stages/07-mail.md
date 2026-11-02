@@ -63,8 +63,8 @@ Lesson: never run checks on the live machine.
       refused (106 total).
 - [x] Live (2 Nov 2026): search, filters, read, thread, fields and saved
       searches checked on 41 Warrs Road.
-- [ ] Live in claude.ai: Claude traces the history of an issue across the
-      project's mail and hands over an attachment as a file.
+- [x] Live in claude.ai (2 Nov 2026): Claude found LVL's mail, read the "Warrs
+      Project Example" transmittal and handed over S161 as a PDF.
 
 ## For the video
 
