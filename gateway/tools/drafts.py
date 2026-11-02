@@ -249,7 +249,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
                 subject = (original["subject"] if re.match(r"(?i)re:", original["subject"])
                            else f"RE: {original['subject']}")
             reply_note = f"Reply to {original['number']}: {original['subject']} (from {original['from']})"
-            reply_link = mail_link(reply_id)
+            reply_link = mail_link(project, reply_id)
         if not subject.strip():
             raise ToolError("The draft needs a subject.")
 
@@ -327,7 +327,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
         result = {
             "saved": f"Saved as unsent draft {number or mail_id}. It has NOT been sent.",
             "draft_number": number, "mail_id": mail_id,
-            "open_in_aconex": mail_link(mail_id),
+            "open_in_aconex": mail_link(project, mail_id, draft=True),
             "next_step": "Give the person the open_in_aconex link: they open the draft in Aconex, "
                          "check it and press Send there (or find it in Mail > Drafts).",
             "subject": draft["preview"]["subject"], "to": draft["preview"]["to"],

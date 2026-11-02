@@ -52,12 +52,23 @@ first and only write.
 
 Lachie asked for a link with each reply. Saved drafts, every mail Claude reads,
 each mail search result and the original of a reply now carry an
-`open_in_aconex` link: `<Aconex site>/ViewCorrespondence?Correspondence_ID=<mail ID>`
-(the format in Aconex's help; the site is `ACONEX_WEB_URL` in `fly.toml`,
-`https://au1.aconex.com` for Australia).
+`open_in_aconex` link:
 
-- [ ] Live: the link opens the draft in Aconex (the help calls the ID a
-      "Correspondence ID"; to confirm it is the API's mail ID).
+`<Aconex site>/ViewCorrespondence?Correspondence_ID=<mail ID>&CORRESPONDENCE_MAILBOX=<1 or 2>&PROJECT_ID=<project ID>`
+
+Worked out with Lachie by copying real links from Aconex (2 Nov 2026):
+
+- The format in Aconex's help (ID only) errors; without the mailbox it shows a
+  blank page. The mailbox is 1 for the inbox (which also holds the company's
+  own sent mail) and 2 for drafts. The API's mail ID is the Correspondence ID.
+- Aconex's newer viewer has links too, but they contain Aconex's release
+  number (e.g. 20261005.1206), which changes with each Aconex update and isn't
+  published anywhere the gateway can read. The classic link doesn't, so it
+  keeps working.
+- The site is `ACONEX_WEB_URL` in `fly.toml` (`https://au1.aconex.com`).
+
+- [x] Live: an inbox link opened the mail (2 Nov 2026).
+- [ ] Live: a saved draft's link opens the draft.
 
 ## For the video
 

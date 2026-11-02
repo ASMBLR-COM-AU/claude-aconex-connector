@@ -39,10 +39,18 @@ def aconex_web_url() -> str:
     return (os.environ.get("ACONEX_WEB_URL", "").strip() or "https://au1.aconex.com").rstrip("/")
 
 
-def mail_link(mail_id: str) -> str:
-    """A link that opens a mail (or draft) in the Aconex website. Format from
-    Aconex's help ("ViewCorrespondence?Correspondence_ID="), checked live."""
-    return f"{aconex_web_url()}/ViewCorrespondence?Correspondence_ID={mail_id}"
+# Aconex's mailbox numbers in its web links (confirmed 2 Nov 2026 by copying
+# real links): 1 = Inbox, 2 = Drafts. The company's inbox also holds the mail it
+# sent, so every mail that isn't a draft opens through 1.
+INBOX, DRAFTS = "1", "2"
+
+
+def mail_link(project_id: str, mail_id: str, draft: bool = False) -> str:
+    """A link that opens a mail (or draft) in the classic Aconex website.
+    Unlike the newer viewer's links, it doesn't contain Aconex's release number,
+    so it keeps working after Aconex updates."""
+    return (f"{aconex_web_url()}/ViewCorrespondence?Correspondence_ID={mail_id}"
+            f"&CORRESPONDENCE_MAILBOX={DRAFTS if draft else INBOX}&PROJECT_ID={project_id}")
 
 
 def _list(name: str) -> frozenset[str]:

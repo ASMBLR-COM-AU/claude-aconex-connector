@@ -52,7 +52,7 @@ def day_stamp(moment: datetime) -> str:
     return moment.strftime("%Y%m%d")  # live: sentdate ranges only match YYYYMMDD
 
 
-def parse_mail_list(root, box: str) -> list:
+def parse_mail_list(root, box: str, project: str = "") -> list:
     mails = []
     for m in root.findall(".//SearchResults/Mail"):
         mail_id = (m.get("MailId") or text(m, "MailId")).strip()
@@ -65,7 +65,7 @@ def parse_mail_list(root, box: str) -> list:
                 "from": person(m.find("FromUserDetails")),
                 "subject": text(m, "Subject"),
                 "box": box,
-                "open_in_aconex": mail_link(mail_id),
+                "open_in_aconex": mail_link(project, mail_id, draft=box == "Draftbox"),
             })
     return mails
 
@@ -106,13 +106,14 @@ def _own(root, *names: str) -> str:
     return ""
 
 
-def parse_mail(root, mail_id: str, attachments_page: int = 1) -> dict:
+def parse_mail(root, mail_id: str, attachments_page: int = 1, project: str = "") -> dict:
     body = root.find(".//MailData")
     body_text = html_to_text("".join(body.itertext())) if body is not None else ""
     recipients = parse_recipients(root)
     mail = {
         "mail_id": mail_id,
-        "open_in_aconex": mail_link(mail_id),
+        "open_in_aconex": mail_link(project, mail_id,
+                                    draft=text(root, ".//MailNo").upper().startswith("DRAFT")),
         "number": text(root, ".//MailNo"),
         "type": text(root, ".//CorrespondenceType"),
         "subject": text(root, ".//Subject"),
@@ -223,7 +224,7 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
             root = await aconex.get_xml(f"/projects/{project}/mail", params, ACCEPT_MAIL)
             label = "received" if aconex_box == "Inbox" else "sent"
             totals[label] = page_info(root).get("total", 0)
-            mails += parse_mail_list(root, label)
+            mails += parse_mail_list(root, label, project)
         # The company's own mail can sit in both boxes; show each mail once.
         merged: dict[str, dict] = {}
         for mail in mails:
@@ -253,7 +254,7 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
         project = seg(project_id, "project ID")
         found = await mail_id_from(project, mail_id, mail_number)
         root = await aconex.get_xml(f"/projects/{project}/mail/{found}", accept=ACCEPT_MAIL)
-        return parse_mail(root, found, attachments_page)
+        return parse_mail(root, found, attachments_page, project)
 
     @read_tool(server, gw,
                "The conversation a mail belongs to: the chain of replies and forwards, so you can "

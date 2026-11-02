@@ -179,14 +179,17 @@ def test_saved_draft_comes_with_a_link_to_open_it():
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", {"project_id": "1001", "mail_type": "Transmittal",
                                                  "message": "Received.", "reply_to_mail_number": "LSGP-TRANSMIT-000143"})])
-    assert p["original_in_aconex"] == "https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=m1"
+    assert p["original_in_aconex"] == ("https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=m1"
+                                       "&CORRESPONDENCE_MAILBOX=1&PROJECT_ID=1001")
     [(_, saved)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})])
-    assert saved["open_in_aconex"] == "https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=d1"
+    assert saved["open_in_aconex"] == ("https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=d1"
+                                       "&CORRESPONDENCE_MAILBOX=2&PROJECT_ID=1001")  # 2 = Drafts
 
 
 def test_mail_links_follow_the_company_aconex_site(monkeypatch):
     monkeypatch.setenv("ACONEX_WEB_URL", "https://uk1.aconex.co.uk/")
     [(_, found)] = session(FakeAconex(), [("search_mail", {"project_id": "1001", "box": "sent"})])
-    assert found["mails"][0]["open_in_aconex"] == "https://uk1.aconex.co.uk/ViewCorrespondence?Correspondence_ID=m8"
+    assert found["mails"][0]["open_in_aconex"] == ("https://uk1.aconex.co.uk/ViewCorrespondence?Correspondence_ID=m8"
+                                                   "&CORRESPONDENCE_MAILBOX=1&PROJECT_ID=1001")
     [(_, mail)] = session(FakeAconex(), [("read_mail", {"project_id": "1001", "mail_id": "m1"})])
-    assert mail["open_in_aconex"].endswith("Correspondence_ID=m1")
+    assert "Correspondence_ID=m1&CORRESPONDENCE_MAILBOX=1&PROJECT_ID=1001" in mail["open_in_aconex"]
