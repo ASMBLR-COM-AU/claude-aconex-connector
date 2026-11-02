@@ -56,7 +56,10 @@ the audit log and, in stage 7, the mail filter.
       audit log shows `sign-in ok lachie@asmblr.com.au`, then a tool call
       under the same email.
 - [x] Works when added on a Claude **Team** account (2 Nov 2026).
-- [ ] Works on an **Enterprise** account (needs access to one).
+- [ ] Works on an **Enterprise** account: not tested (no Enterprise organisation
+      available, 2 Nov 2026). Claude's docs describe the same connector flow for Team
+      and Enterprise; Enterprise may have stricter defaults for code execution and
+      allowed domains (see the runbook).
 - [ ] Someone not approved is refused (live).
 
 ## Not done yet
