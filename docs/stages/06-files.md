@@ -28,13 +28,24 @@ Tried on EL-CSH12 rev 7 "Precast Elevation", 41 Warrs Road (261 KB).
 | Claude surface | PDF inside the reply | Download link |
 |---|---|---|
 | Claude Code (cloud session, 2 Nov 2026) | ✅ saved as a file and read; byte-identical to the link's copy | ✅ Claude fetched it itself and read it |
-| claude.ai chat | to test | to test |
+| claude.ai chat (2 Nov 2026) | ❌ "Resources of type 'application/pdf' are not currently supported" | ⚠️ Claude's workspace is blocked from fly.dev (403); its web fetch gets the text only |
 | Cowork | to test (optional) | to test (optional) |
 
 Claude Code read the drawing correctly: title block (EL-CSH12 rev 7, SmartDrafting
 for Hamilton Marino Builders, "Approval – not for construction"), columns
 C122–C132 on grids 2, K, 5 and 6, levels Basement 1 (RL 32.300) to Roof
 (RL 67.950).
+
+## Next test: a picture of the page
+
+claude.ai accepts images in tool replies, so a third tool, `test_pdf_page_image`,
+draws one page (or one quarter of it, at twice the detail) as a picture, 2000
+pixels on its longest side. Uses `pypdfium2` (the PDF engine in Chrome) and
+`pillow`.
+
+A second claude.ai route needs no code: adding `aconex-gateway.fly.dev` to the
+organisation's allowed websites for Claude's workspace, so Claude can download
+the real PDF itself.
 
 ## Scope
 

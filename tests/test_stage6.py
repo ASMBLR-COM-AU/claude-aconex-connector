@@ -92,3 +92,24 @@ def test_link_is_only_stored_scrambled(tmp_path):
     token = path.rsplit("/", 1)[-1]
     raw = (tmp_path / "gateway.db").read_bytes()
     assert token.encode() not in raw
+
+
+def test_page_picture_whole_and_quarter():
+    from PIL import Image
+    import io as _io
+    fake = FakeAconex()
+    whole = call(fake, "test_pdf_page_image", {"project_id": "1001", "document_id": "9001"})
+    text, image = whole.content
+    assert image.type == "image" and image.mime_type == "image/png"
+    assert "page 1 of 1, whole" in text.text
+    assert Image.open(_io.BytesIO(base64.b64decode(image.data))).size == (2000, 2000)
+    quarter = call(fake, "test_pdf_page_image", {"project_id": "1001", "document_id": "9001", "part": "top-left"})
+    assert Image.open(_io.BytesIO(base64.b64decode(quarter.content[1].data))).size == (2000, 2000)
+
+
+def test_page_picture_explains_bad_page_and_part():
+    fake = FakeAconex()
+    assert "page 1 to 1" in call(fake, "test_pdf_page_image",
+                                 {"project_id": "1001", "document_id": "9001", "page": 3}).content[0].text
+    assert "part must be" in call(fake, "test_pdf_page_image",
+                                  {"project_id": "1001", "document_id": "9001", "part": "middle"}).content[0].text

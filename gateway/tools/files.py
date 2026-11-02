@@ -8,6 +8,8 @@ surfaces (claude.ai chat, Desktop, Cowork, Claude Code) accept:
    chat has been reported to reject it.
 2. `test_pdf_download_link`: a short-lived link to the PDF. Claude Code and
    Cowork can fetch it themselves; in claude.ai the person clicks it.
+3. `test_pdf_page_image`: a picture of one page (or a quarter of it, in more
+   detail), since claude.ai accepts images in tool replies but not PDFs.
 
 Whichever works becomes the real tool and these are removed.
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import mimetypes
 import os
 import secrets
@@ -29,7 +32,8 @@ import time
 from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
-from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource, TextContent
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource, ImageContent, TextContent
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 
@@ -39,6 +43,43 @@ from gateway.tools import Gateway, current_person, read_tool
 
 LINK_TTL_S = 15 * 60
 LINK_MAX_USES = 5
+
+IMAGE_EDGE_PX = 2000          # longest side of the picture sent to Claude
+PNG_LIMIT_BYTES = 1_500_000   # above this, send a JPEG instead
+PARTS = ("whole", "top-left", "top-right", "bottom-left", "bottom-right")
+
+
+def page_picture(pdf: bytes, page_number: int, part: str) -> tuple[bytes, str, str]:
+    """Render one page (or a quarter of it) as a picture. Returns (image,
+    mime type, description). A quarter is rendered at twice the detail."""
+    import pypdfium2 as pdfium
+
+    try:
+        document = pdfium.PdfDocument(pdf)
+    except pdfium.PdfiumError:
+        raise ToolError("That file isn't a PDF the gateway can draw.") from None
+    pages = len(document)
+    if not 1 <= page_number <= pages:
+        raise ToolError(f"That document has {pages} page(s); ask for page 1 to {pages}.")
+    page = document[page_number - 1]
+    width, height = page.get_size()
+    edge = IMAGE_EDGE_PX * (1 if part == "whole" else 2)
+    image = page.render(scale=edge / max(width, height), grayscale=True).to_pil()
+    if part != "whole":
+        w, h = image.size
+        left = 0 if part.endswith("left") else w // 2
+        top = 0 if part.startswith("top") else h // 2
+        image = image.crop((left, top, left + w // 2 + w % 2, top + h // 2 + h % 2))
+    out = io.BytesIO()
+    image.save(out, "PNG", optimize=True)
+    kind = "image/png"
+    if out.tell() > PNG_LIMIT_BYTES:
+        out = io.BytesIO()
+        image.convert("L").save(out, "JPEG", quality=80)
+        kind = "image/jpeg"
+    data = out.getvalue()
+    return data, kind, (f"page {page_number} of {pages}, {part}, {image.size[0]}x{image.size[1]} px, "
+                        f"{kind.split('/')[1].upper()} {len(data) // 1024} KB")
 
 
 def _hash(value: str) -> str:
@@ -127,6 +168,23 @@ def register(server: MCPServer, gw: Gateway) -> FileLinks:
                 mime_type=mime_type(name),
                 blob=base64.b64encode(content).decode(),
             )),
+        ])
+
+    @read_tool(server, gw,
+               "TEST (stage 6 experiment): a picture of one page of a register document's PDF, so "
+               "you can look at a drawing. part: whole (the full sheet) or top-left, top-right, "
+               "bottom-left, bottom-right (that quarter, in twice the detail: use it to read small "
+               "text, dimensions and details).")
+    async def test_pdf_page_image(project_id: str, document_id: str, page: int = 1,
+                                  part: str = "whole") -> CallToolResult:
+        if part not in PARTS:
+            raise ToolError("part must be one of: " + ", ".join(PARTS) + ".")
+        project, document = seg(project_id, "project ID"), seg(document_id, "document ID")
+        content, name = await gw.aconex.get_file(document_path(project, document))
+        image, kind, about = page_picture(content, page, part)
+        return CallToolResult(content=[
+            TextContent(type="text", text=f"{name}: {about}."),
+            ImageContent(type="image", data=base64.b64encode(image).decode(), mime_type=kind),
         ])
 
     @read_tool(server, gw,
