@@ -44,8 +44,9 @@ first and only write.
 - [x] Live preview (2 Nov 2026, nothing saved): recipients, mail type, reason,
       attached EL-CSH12 rev 7, and the signature "Lachie Barnett / Founder /
       ASMBLR / 410004180 / lachie@asmblr.com.au" from Aconex.
-- [ ] Live in claude.ai: Lachie approves a draft to an ASMBLR colleague, it
-      appears in Aconex › Mail › Drafts, he presses Send, and it shows as from him.
+- [x] Live in claude.ai (2 Nov 2026): Lachie approved a draft to Rev Radar, it
+      appeared in Aconex › Mail › Drafts with the right signature, and he sent it
+      from Aconex.
 
 ## For the video
 
