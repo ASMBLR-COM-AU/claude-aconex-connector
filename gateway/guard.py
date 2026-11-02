@@ -28,6 +28,12 @@ UNKNOWN_PERSON = "not signed in (local test)"
 MAX_ARGUMENTS_CHARS = 1000
 
 
+def public_url() -> str:
+    """The gateway's own web address."""
+    host = os.environ.get("PUBLIC_HOST", "").strip()
+    return f"https://{host}" if host else "http://localhost:8080"
+
+
 def _list(name: str) -> frozenset[str]:
     return frozenset(v.strip().lower() for v in os.environ.get(name, "").split(",") if v.strip())
 

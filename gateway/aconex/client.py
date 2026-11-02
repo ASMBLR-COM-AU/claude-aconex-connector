@@ -246,6 +246,16 @@ class AconexClient:
         except ValueError:
             raise AconexError("Aconex sent back something that isn't JSON.") from None
 
+    async def get_file(self, path: str, params: dict | None = None,
+                       max_bytes: int = 25 * 1024 * 1024) -> tuple[bytes, str]:
+        """Download a file. Returns (content, file name). Aconex sends every
+        file as application/octet-stream and percent-encodes the name (live)."""
+        response = await self.get(path, params, accept="application/octet-stream")
+        if len(response.content) > max_bytes:
+            raise AconexError(f"That file is {len(response.content) // (1024 * 1024)} MB, over the "
+                              f"gateway's {max_bytes // (1024 * 1024)} MB limit.")
+        return response.content, file_name(response.headers.get("content-disposition", ""))
+
     async def search_post(self, path: str, body: dict, accept: str = ACCEPT_JSON) -> httpx.Response:
         """POST to an endpoint that only searches. Refuses any other path."""
         if not any(p.match(path) for p in SEARCH_ONLY_POSTS):
@@ -254,6 +264,17 @@ class AconexClient:
 
     async def aclose(self) -> None:
         await self._http.aclose()
+
+
+def file_name(disposition: str) -> str:
+    """The file name from a Content-Disposition header, decoded."""
+    from urllib.parse import unquote
+
+    star = re.search(r"filename\*=(?:UTF-8'')?([^;]+)", disposition, re.I)
+    plain = re.search(r'filename="?([^";]+)"?', disposition, re.I)
+    found = star or plain
+    name = unquote(found.group(1).strip().strip('"')) if found else ""
+    return name.replace("/", "_").replace("\\", "_") or "document"
 
 
 def _login_reason(response: httpx.Response) -> str:

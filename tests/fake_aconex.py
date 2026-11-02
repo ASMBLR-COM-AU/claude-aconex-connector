@@ -116,6 +116,14 @@ INTEGRITY = b"""<DocumentIntegrity>
 </DocumentIntegrity>"""
 
 
+# A tiny but real PDF, as Aconex sends a register file (live: octet-stream,
+# percent-encoded file name).
+PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj "
+       b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF")
+PDF_HEADERS = {"content-type": "application/octet-stream",
+               "content-disposition": "attachment; filename=\"S-1100%20Rev%20B.pdf\"; filename*=UTF-8''S-1100%20Rev%20B.pdf"}
+
+
 class FakeAconex:
     def __init__(self) -> None:
         self.calls: list[dict] = []
@@ -153,6 +161,8 @@ class FakeAconex:
         if self.reject_next_token:
             self.reject_next_token = False
             return httpx.Response(401, text="token expired")
+        if request.method == "GET" and path == "/projects/1001/register/9001":
+            return httpx.Response(200, content=PDF, headers=PDF_HEADERS)
         query = request.url.params.get("search_query", "")
         if path == "/projects/1001/register" and ("1DG203" in query or "NOTHINGHERE" in query):
             found = "1DG203" in query and request.url.params.get("content_search") == "true"
