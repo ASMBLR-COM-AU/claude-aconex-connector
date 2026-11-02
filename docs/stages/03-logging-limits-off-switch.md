@@ -34,7 +34,10 @@ key is connected.
 - [x] Flipping the switch stops every Aconex tool, and nothing reaches Aconex
       (test). `/health` still answers and says it's off.
 - [x] An unapproved project never reaches Aconex (test).
-- [ ] Live: the log survives a restart on Fly (checked after deploy).
+- [x] Live (2 Nov 2026): a call to an unapproved project was refused, and both
+      calls appeared as audit lines in Fly's log.
+- [ ] Live: the log file survives a restart. Needs `fly ssh` (see runbook),
+      which this build session can't reach; covered by a test meanwhile.
 
 ## Decisions
 
