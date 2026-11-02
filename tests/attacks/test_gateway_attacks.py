@@ -103,15 +103,13 @@ def test_authorization_code_is_bound_to_the_client_that_asked_for_it(signin_env)
     assert stolen.status_code >= 400
 
 
-def test_failed_signins_leave_no_audit_trail(signin_env):
-    """FINDING (Q5, low): a sign-in that fails the identity checks (forged,
-    expired, tampered, wrong tenant, cancelled) is NOT written to the audit
-    log, so an attacker can hammer /auth/callback with bad identities and
-    leave no trace. Only "not on the approved list" and success are recorded.
+def test_failed_signins_are_audited(signin_env):
+    """WAS Finding 3 (now fixed): a sign-in that fails the identity checks
+    (here, a long-expired identity) is written to the audit log as a blocked
+    sign-in, so probing /auth/callback with bad identities leaves a trace.
     docs/security.md promise 7 says every sign-in is logged.
 
-    Suggested fix: audit.record(..., tool="sign-in", outcome="blocked",
-    detail=<reason>) in GatewaySignIn.callback's SignInError branch too.
+    Before the fix this attempt produced zero audit rows; it now records one.
     """
     google = FakeGoogle()
     google.claims_override = {"exp": 1_000_000_000}  # long-expired identity
@@ -120,8 +118,9 @@ def test_failed_signins_leave_no_audit_trail(signin_env):
         client_id = register(client).json()["client_id"]
         _, back = _authorize_to_code(client, google, client_id, verifier=secrets.token_urlsafe(48))
     assert back.status_code == 400 and "expired" in back.text
-    # The whole failed attempt produced zero audit rows (the finding):
-    assert audit.recent(10) == []
+    rows = audit.recent(10)
+    assert rows and rows[0]["tool"] == "sign-in" and rows[0]["outcome"] == "blocked"
+    assert rows[0]["person"] == ""  # no verified identity to attribute it to
 
 
 # ── Q2. Can anything but an unsent draft be written to Aconex? ──────────────
@@ -312,44 +311,39 @@ def test_audit_arguments_cannot_forge_extra_log_lines():
 
 # ── Q6. Cheap denial of service: client registrations ───────────────────────
 
-def test_client_registration_budget_is_one_global_bucket_that_never_empties(signin_env):
-    """FINDING (Q6, medium for availability + low for storage): sign-in client
-    registration is unauthenticated and limited by a SINGLE global 30-per-10-min
-    counter, and the rows are never deleted. So (a) an attacker who spends the 30
-    blocks EVERY new client - including a new staff member's Claude - until the
-    window rolls off, and (b) the clients table grows without bound (no TTL, not
-    touched by SignInStore.tidy()).
+def _register_as(client, ip: str):
+    return client.post("/register", headers={"Fly-Client-IP": ip}, json={
+        "redirect_uris": [CLAUDE_CALLBACK], "client_name": "x",
+        "token_endpoint_auth_method": "none",
+        "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"]})
 
-    Suggested fix: make the limit per-source (and/or require the register to be
-    cheap but idempotent), and expire client rows (e.g. drop registrations unused
-    for N days in tidy()).
+
+def test_registration_is_limited_per_source_and_the_table_is_bounded(signin_env, monkeypatch):
+    """WAS Finding 2 (now fixed): registration is limited PER SOURCE ADDRESS,
+    not by one global bucket, so a flood from one address can't lock out a new
+    user at another; and the clients table is capped (oldest evicted), so it
+    can't grow without bound.
+
+    Before the fix this test asserted the vulnerable behaviour (a single global
+    30-per-10-min counter whose rows were never cleaned); it now guards the fix.
     """
+    from gateway import signin as signin_mod
+    monkeypatch.setattr(signin_mod, "MAX_CLIENTS", 5)  # tiny cap to show eviction
     google = FakeGoogle()
     with http(app(google)) as client:
-        codes = [register(client).status_code for _ in range(31)]
-        # The attacker's first 30 succeed and exhaust the shared budget...
-        assert codes[:30] == [201] * 30
-        # ...so the 31st registration (imagine a brand-new approved user) is refused:
-        assert codes[30] == 400
+        flood = [_register_as(client, "9.9.9.9").status_code for _ in range(31)]
+        # One source is capped at 30, then refused with 429 (not a global lockout):
+        assert flood[:30] == [201] * 30 and flood[30] == 429
+        # A DIFFERENT source is NOT locked out by the first one's flood:
+        assert _register_as(client, "8.8.8.8").status_code == 201
 
-    # Every one of the 30 is still stored, and tidy() doesn't reduce it.
+    # Despite ~31 successful registrations, the table stayed bounded at the cap:
     import os
-    db = os.environ["AUDIT_DB"]
-    con = sqlite3.connect(db)
+    con = sqlite3.connect(os.environ["AUDIT_DB"])
     try:
-        before = con.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+        assert con.execute("SELECT COUNT(*) FROM clients").fetchone()[0] <= 5
     finally:
         con.close()
-    assert before == 30
-
-    from gateway.signin import SignInStore
-    SignInStore(db).tidy()
-    con = sqlite3.connect(db)
-    try:
-        after = con.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
-    finally:
-        con.close()
-    assert after == 30  # tidy() left every client registration in place
 
 
 def test_per_person_tool_limit_is_in_memory_only():

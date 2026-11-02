@@ -1,3 +1,8 @@
 mcp==2.3.0
 uvicorn==0.54.0
 httpx==0.28.1
+# Pinned explicitly: the sign-in signature checks (gateway/signin.py) depend on
+# these directly, even though they arrive as transitive dependencies of mcp.
+# Pinning keeps the deployed crypto libraries identical to the tested ones.
+pyjwt==2.15.1
+cryptography==50.0.2

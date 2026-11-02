@@ -300,10 +300,12 @@ def test_public_health_page_reveals_nothing():
 
 @pytestmark_signin
 def test_sign_in_registrations_are_limited():
+    # Per source address (all TestClient requests share one), 30 per 10 minutes;
+    # over that the server layer answers 429 before the registration is handled.
     from tests.test_stage4 import register
     with http(app(FakeGoogle())) as client:
         codes = [register(client).status_code for _ in range(32)]
-    assert codes[:30] == [201] * 30 and set(codes[30:]) == {400}
+    assert codes[:30] == [201] * 30 and set(codes[30:]) == {429}
 
 
 def test_no_hidden_characters_in_the_gateways_own_files():

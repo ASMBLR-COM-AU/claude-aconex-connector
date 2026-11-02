@@ -30,7 +30,6 @@ import secrets
 import sqlite3
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlencode, urlsplit
 
@@ -59,10 +58,13 @@ CODE_TTL_S = 5 * 60            # gateway's one-time code, swapped by Claude for 
 ACCESS_TTL_S = 60 * 60         # a pass lasts an hour...
 REFRESH_TTL_S = 14 * 24 * 3600  # ...and renews automatically for two weeks
 
-# Anyone may register a sign-in client (Claude needs that), so registrations
-# are limited to this many in any 10 minutes across the whole gateway. A
-# registration on its own grants nothing: only approved people can sign in.
-REGISTRATIONS_PER_10_MIN = 30
+# Anyone may register a sign-in client (Claude needs that), and a registration
+# on its own grants nothing: only approved people can sign in. Two safeguards
+# keep that openness from being abused: the server rate limits /register per
+# source address (with_registration_limit in gateway/server.py), and the stored
+# registrations are capped here so the table can't grow without bound - the
+# oldest are dropped first.
+MAX_CLIENTS = 1000
 
 # Where Claude may ask for people to be sent back to after signing in.
 CLAUDE_CALLBACK = "https://claude.ai/api/mcp/auth_callback"
@@ -283,7 +285,6 @@ class GatewaySignIn:
         self.policy = policy
         self.audit = audit
         self.resource_url = resource_url
-        self._registrations: deque = deque()
 
     # client registration (Claude registers itself; only its own callbacks are accepted)
 
@@ -298,15 +299,14 @@ class GatewaySignIn:
                 error="invalid_redirect_uri",
                 error_description="This gateway only signs in Claude.",
             )
-        now = time.monotonic()
-        while self._registrations and self._registrations[0] <= now - 600:
-            self._registrations.popleft()
-        if len(self._registrations) >= REGISTRATIONS_PER_10_MIN:
-            raise RegistrationError(error="invalid_client_metadata",
-                                    error_description="Too many sign-in registrations. Try again shortly.")
-        self._registrations.append(now)
         self.store.run("INSERT OR REPLACE INTO clients VALUES (?, ?, ?)",
                        (client_info.client_id, client_info.model_dump_json(), time.time()))
+        # Keep only the most recent MAX_CLIENTS registrations, so a flood of
+        # registrations can't grow this table without bound. (Per-source rate
+        # limiting lives in the server layer; see with_registration_limit.)
+        self.store.run(
+            "DELETE FROM clients WHERE client_id NOT IN "
+            "(SELECT client_id FROM clients ORDER BY created DESC LIMIT ?)", (MAX_CLIENTS,))
 
     # sign-in: off to Google/Microsoft, and back
 
@@ -328,13 +328,20 @@ class GatewaySignIn:
                               "WHERE state = ?", (state,))
         self.store.run("DELETE FROM logins WHERE state = ?", (state,))
         if not rows or rows[0][4] < time.time():
+            # Deliberately not audited: this branch is reachable unauthenticated
+            # with any made-up state, so logging it would let anyone flood the
+            # audit log. The branches below need a real, unexpired login row.
             return _page("This sign-in link has expired. Go back to Claude and connect again.", 400)
         client_id, params_json, nonce, verifier, _ = rows[0]
         if "error" in request.query_params or "code" not in request.query_params:
+            self.audit.record(person="", tool="sign-in", project="", arguments={},
+                              outcome="blocked", detail="cancelled at the sign-in service")
             return _page("Sign-in was cancelled. Go back to Claude and connect again.", 400)
         try:
             email = await self.idp.email_for(request.query_params["code"], verifier, nonce)
         except SignInError as err:
+            self.audit.record(person="", tool="sign-in", project="", arguments={},
+                              outcome="blocked", detail=str(err))
             return _page(str(err), 400)
 
         if not self.policy.person_allowed(email):

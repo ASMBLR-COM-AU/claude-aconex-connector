@@ -8,6 +8,8 @@ menu is listed in docs/features.md; anything not on the menu can't be done.
 """
 
 import os
+import time
+from collections import deque
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
@@ -115,6 +117,54 @@ SECURITY_HEADERS = [
 ]
 
 
+# Sign-in client registration is open (Claude must register before anyone
+# signs in), so it's rate limited PER SOURCE ADDRESS rather than by one global
+# counter: a flood from one place must not lock out a new user elsewhere. On
+# Fly the real client address is in the Fly-Client-IP header, which the Fly
+# edge sets and a client can't forge; off Fly we fall back to the socket peer.
+REGISTRATIONS_PER_10_MIN_PER_IP = 30
+_REGISTER_WINDOW_S = 600
+_MAX_TRACKED_IPS = 10_000
+
+
+def _source_ip(scope) -> str:
+    for key, value in scope.get("headers", []):
+        if key == b"fly-client-ip" and value:
+            return value.decode("latin-1")
+    client = scope.get("client")
+    return client[0] if client else "unknown"
+
+
+def with_registration_limit(app, per_ip: int = REGISTRATIONS_PER_10_MIN_PER_IP,
+                            window_s: int = _REGISTER_WINDOW_S):
+    """Rate limit POST /register per source address, so a flood from one place
+    can't block new sign-in registrations for everyone else. In-memory, so it
+    resets on restart; the real backstop against unbounded storage is the
+    MAX_CLIENTS cap in gateway/signin.py."""
+    seen: dict[str, deque] = {}
+
+    async def wrapped(scope, receive, send):
+        if scope["type"] == "http" and scope.get("method") == "POST" and scope.get("path") == "/register":
+            now = time.monotonic()
+            if len(seen) > _MAX_TRACKED_IPS:  # coarse memory bound under a many-address flood
+                seen.clear()
+            calls = seen.setdefault(_source_ip(scope), deque())
+            while calls and calls[0] <= now - window_s:
+                calls.popleft()
+            if len(calls) >= per_ip:
+                body = (b'{"error":"too_many_requests","error_description":"Too many sign-in '
+                        b'registrations from your address. Try again shortly."}')
+                await send({"type": "http.response.start", "status": 429, "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+            calls.append(now)
+        return await app(scope, receive, send)
+
+    return wrapped
+
+
 def with_security_headers(app):
     """Adds SECURITY_HEADERS to every response."""
     async def wrapped(scope, receive, send):
@@ -138,4 +188,4 @@ def build_app(aconex: AconexClient | None = None, policy: Policy | None = None,
         json_response=True,
         transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts()),
     )
-    return with_security_headers(app)
+    return with_security_headers(with_registration_limit(app))
