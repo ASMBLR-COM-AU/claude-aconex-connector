@@ -162,3 +162,19 @@ Aconex allows 5 requests a second and 10 at once for the whole company. The
 gateway uses at most 3 a second and 4 at once by default, leaving room for
 other systems. Change with the `ACONEX_PER_SECOND` and `ACONEX_AT_ONCE`
 settings if IT agrees a different share.
+
+## Test run (after every change, before every demo)
+
+```bash
+scripts/test-run.sh
+```
+
+Asks the gateway 23 real questions against the real Aconex test project
+(find a drawing, get its PDF, search mail, preview a draft, refuse what it
+should refuse, check the live site from outside) and prints a pass/fail
+table, saved in `docs/test-runs/`. It takes about a minute.
+
+It runs on a temporary Fly machine that deletes itself, never on the live one,
+in reads-only mode: the outgoing check refuses even unsent drafts, so nothing
+is saved or sent. The documents and people it looks for are in `FACTS` at the
+top of `gateway/testrun.py`; change them for another company's test project.
