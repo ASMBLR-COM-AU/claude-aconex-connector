@@ -1,0 +1,44 @@
+# Made by scripts/new_company.py from this template. Don't edit the template
+# for one company: run the script again instead.
+app = "{app}"
+primary_region = "{region}"
+
+[env]
+  PUBLIC_HOST = "{app}.fly.dev"
+  AUDIT_DB = "/data/audit.db"
+  # Projects the gateway may use, comma-separated Aconex project IDs. Empty
+  # means none. To change it, edit it here and deploy again.
+  ALLOWED_PROJECTS = "{projects}"{projects_note}
+  # People who may sign in: comma-separated emails, and/or whole domains in
+  # ALLOWED_DOMAINS. Empty means nobody. Edit here and deploy again.
+  ALLOWED_EMAILS = "{emails}"
+  ALLOWED_DOMAINS = "{domains}"
+  # Company sign-in service. Google by default; for Microsoft see docs/runbook.md.
+  # SIGNIN_CLIENT_ID and SIGNIN_CLIENT_SECRET are Fly secrets, never in this file.
+  SIGNIN_ISSUER = "{issuer}"
+  # The company's Aconex website, for "open in Aconex" links.
+  ACONEX_WEB_URL = "{aconex_web}"
+
+# Encrypted 1 GB volume for the audit log, with daily snapshots kept 5 days.
+[mounts]
+  source = "gateway_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Stop the machine when idle to save money; it starts again on the next request.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

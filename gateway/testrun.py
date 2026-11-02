@@ -22,15 +22,19 @@ import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
-PROJECT = os.environ.get("TESTRUN_PROJECT", "2013297249")
 LIVE = os.environ.get("TESTRUN_LIVE_URL", "https://aconex-gateway.fly.dev")
+# This repo's own test project (41 Warrs Road). A company's facts come from its
+# deploy-<company>/testrun.json, passed in by scripts/test-run.sh.
 FACTS = {
+    "project": "2013297249",
     "drawing": "EL-CSH12",           # a drawing with a PDF
     "drawing_title_word": "precast",
     "words_inside_files": "reinforcement",  # printed inside documents, not in their titles
     "person": "Baysinger",           # someone in the project directory
     "company": "ASMBLR",             # the gateway's own company
 }
+FACTS.update(json.loads(os.environ.get("TESTRUN_FACTS", "") or "{}"))
+PROJECT = str(FACTS["project"])
 
 
 def setup_environment() -> None:

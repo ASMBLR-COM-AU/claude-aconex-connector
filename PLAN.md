@@ -83,6 +83,11 @@ sign-in checks (plus Google Workspace-only and own-Microsoft-tenant-only),
 honest wording for draft preview codes, a library vulnerability check in CI,
 and 32 attack tests. See [docs/security.md](docs/security.md).
 
+**Product (2 Nov 2026):** test runs (`scripts/test-run.sh`: 23 real questions
+against the real Aconex, read-only; first run 23 of 23) and a setup kit for
+each company (`scripts/new_company.py`, `scripts/set-keys.sh`,
+`deploy/SETUP.template.md`).
+
 **Not being done yet (Lachie's decision, 2 Nov 2026; to revisit before any
 other company uses the gateway).** These were planned before
 other people use the gateway; they're kept here for the record:

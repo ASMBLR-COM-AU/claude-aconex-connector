@@ -5,16 +5,16 @@ primary_region = "syd"
   PUBLIC_HOST = "aconex-gateway.fly.dev"
   AUDIT_DB = "/data/audit.db"
   # Projects the gateway may use, comma-separated Aconex project IDs. Empty
-  # means none. Changing it goes through GitHub, so a person approves it.
+  # means none. To change it, edit it here and deploy again.
   ALLOWED_PROJECTS = "2013297249"  # 41 Warrs Road Maribyrnong (25WAR), test project
   # People who may sign in: comma-separated emails, and/or whole domains in
-  # ALLOWED_DOMAINS. Empty means nobody. Changes go through GitHub.
+  # ALLOWED_DOMAINS. Empty means nobody. Edit here and deploy again.
   ALLOWED_EMAILS = "lachie@asmblr.com.au"
   ALLOWED_DOMAINS = ""
   # Company sign-in service. Google by default; for Microsoft see docs/runbook.md.
   # SIGNIN_CLIENT_ID and SIGNIN_CLIENT_SECRET are Fly secrets, never in this file.
   SIGNIN_ISSUER = "https://accounts.google.com"
-  # The company's Aconex website, for "open in Aconex" links (au1 = Australia).
+  # The company's Aconex website, for "open in Aconex" links.
   ACONEX_WEB_URL = "https://au1.aconex.com"
 
 # Encrypted 1 GB volume for the audit log, with daily snapshots kept 5 days.

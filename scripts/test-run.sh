@@ -2,7 +2,10 @@
 # Test run against the real Aconex, read-only, on a TEMPORARY Fly machine
 # (never the live one, which is small and serves real people).
 #
-#   scripts/test-run.sh            # report printed and saved to docs/test-runs/
+#   scripts/test-run.sh                       # this repo's own gateway (fly.toml)
+#   scripts/test-run.sh deploy-<company>      # a company's gateway (its fly.toml and testrun.json)
+#
+# The report is printed and saved in docs/test-runs/ (or the company's folder).
 #
 # Needs flyctl logged in to the gateway's Fly app. The temporary machine uses
 # the same image as the live gateway, gets the Aconex key from Fly secrets
@@ -10,10 +13,20 @@
 # (the outgoing check refuses even unsent drafts) and deletes itself.
 set -euo pipefail
 
-APP="${APP:-aconex-gateway}"
 cd "$(dirname "$0")/.."
+FOLDER="${1:-}"
+CONFIG="${FOLDER:+$FOLDER/}fly.toml"
+REPORTS="${FOLDER:-docs/test-runs}"
+[ -f "$CONFIG" ] || { echo "No $CONFIG" >&2; exit 2; }
 
-setting() { grep -E "^\s*$1\s*=" fly.toml | head -1 | sed -E 's/^[^=]*=\s*"([^"]*)".*/\1/'; }
+setting() { grep -E "^\s*$1\s*=" "$CONFIG" | head -1 | sed -E 's/^[^=]*=\s*"([^"]*)".*/\1/'; }
+APP="$(setting app)"
+FACTS=""
+if [ -n "$FOLDER" ]; then
+  [ -f "$FOLDER/testrun.json" ] || { echo "No $FOLDER/testrun.json" >&2; exit 2; }
+  grep -q "FILL IN" "$FOLDER/testrun.json" && { echo "Fill in $FOLDER/testrun.json first." >&2; exit 2; }
+  FACTS="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))))' "$FOLDER/testrun.json")"
+fi
 
 IMAGE=$(flyctl machine list -a "$APP" --json | python3 -c \
   'import json,sys; ms=[m for m in json.load(sys.stdin) if not m["name"].startswith("testrun")]; print(ms[0]["config"]["image"])')
@@ -27,6 +40,8 @@ ID=$(flyctl machine run "$IMAGE" -a "$APP" --region syd --vm-memory 512 --restar
   --env ALLOWED_PROJECTS="$(setting ALLOWED_PROJECTS)" \
   --env ALLOWED_EMAILS="$(setting ALLOWED_EMAILS)" \
   --env ACONEX_WEB_URL="$(setting ACONEX_WEB_URL)" \
+  --env TESTRUN_LIVE_URL="https://$(setting PUBLIC_HOST)" \
+  ${FACTS:+--env "TESTRUN_FACTS=$FACTS"} \
   -- python -m gateway.testrun 2>&1 | tee /dev/stderr | grep -oE 'Machine ID: [0-9a-f]+' | awk '{print $3}')
 [ -n "$ID" ] || { echo "Couldn't start the temporary machine." >&2; exit 2; }
 
@@ -40,12 +55,12 @@ done
 
 grep -q "TEST RUN:" "$LOG" || { echo "No result after 10 minutes. Log so far:" >&2; cat "$LOG" >&2; exit 2; }
 
-mkdir -p docs/test-runs
-OUT="docs/test-runs/$(date -u +%Y-%m-%d-%H%M).md"
+mkdir -p "$REPORTS"
+OUT="$REPORTS/test-run-$(date -u +%Y-%m-%d-%H%M).md"
 # Fly prefixes each log line with colours, time, machine, region and level
 # ("... app[id] syd [info]"); remove exactly that, then keep only the report.
 sed -E 's/\x1b\[[0-9;]*m//g; s/^[^]]*\] [a-z]+ \[[a-z]+\]//' "$LOG" | sed -n '/=====REPORT=====/,/=====END=====/p' | sed '1d;$d' > "$OUT"
-cp "$OUT" docs/test-runs/latest.md
+cp "$OUT" "$REPORTS/latest.md"
 cat "$OUT"
 echo
 grep -o "TEST RUN: .*" "$LOG" | tail -1
