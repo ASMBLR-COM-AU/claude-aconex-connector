@@ -10,7 +10,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from gateway.aconex import AconexError, seg
-from gateway.aconex.parse import first, flatten, lucene_phrase, page_info, schema_values, text
+from gateway.aconex.parse import clean_value, first, flatten, lucene_phrase, page_info, schema_values, text
 from gateway.tools import Gateway, clamp, parse_when, read_tool
 
 RETURN_FIELDS = "docno,title,revision,statusid,doctype,discipline,revisiondate,filename"
@@ -316,7 +316,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
             "resultSize": 25,
         })
         try:
-            return {"results": readable_dates(response.json())}
+            return {"results": readable_dates(clean_value(response.json()))}
         except ValueError:
             raise AconexError("Aconex sent back something unexpected for this search.") from None
 

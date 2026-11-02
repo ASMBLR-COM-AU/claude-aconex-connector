@@ -26,6 +26,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from gateway.aconex.parse import clean_text, clean_tree, clean_value
+
 DEFAULT_API_URL = "https://api.aconex.com/api"
 DEFAULT_TOKEN_URL = "https://constructionandengineering.oraclecloud.com/auth/token"
 
@@ -295,7 +297,7 @@ class AconexClient:
     async def get_json(self, path: str, params: dict | None = None, accept: str = ACCEPT_JSON):
         response = await self.get(path, params, accept)
         try:
-            return response.json()
+            return clean_value(response.json())
         except ValueError:
             raise AconexError("Aconex sent back something that isn't JSON.") from None
 
@@ -347,7 +349,7 @@ def file_name(disposition: str) -> str:
     star = re.search(r"filename\*=(?:UTF-8'')?([^;]+)", disposition, re.I)
     plain = re.search(r'filename="?([^";]+)"?', disposition, re.I)
     found = star or plain
-    name = unquote(found.group(1).strip().strip('"')) if found else ""
+    name = clean_text(unquote(found.group(1).strip().strip('"'))) if found else ""
     return name.replace("/", "_").replace("\\", "_") or "document"
 
 
@@ -363,7 +365,8 @@ def _login_reason(response: httpx.Response) -> str:
 
 
 def parse_xml(content: bytes) -> ET.Element:
+    """Aconex's XML reply, with hidden characters removed (parse.clean_text)."""
     try:
-        return ET.fromstring(content)
+        return clean_tree(ET.fromstring(content))
     except ET.ParseError as err:
         raise AconexError(f"Aconex sent back something that isn't XML ({err}).") from None

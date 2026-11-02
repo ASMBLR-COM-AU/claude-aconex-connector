@@ -48,7 +48,7 @@ def test_ping_and_health_still_answer_when_off(monkeypatch):
     result, _ = run_tool(FakeAconex(), "ping")
     assert not result.is_error
     with TestClient(build_app(FakeAconex().client())) as http:
-        assert http.get("/health").json()["switched_off"] is True
+        assert http.get("/health").json() == {"status": "ok"}
 
 
 def test_off_switch_values():

@@ -7,6 +7,7 @@ import pwd
 import uvicorn
 
 from gateway.aconex.client import describe_keys
+from gateway.guard import Policy
 from gateway.server import build_app
 
 RUN_AS = "gateway"
@@ -33,5 +34,8 @@ def drop_root() -> None:
 if __name__ == "__main__":
     drop_root()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    logging.getLogger("gateway").info("Aconex keys (shape only): %s", describe_keys())
+    log = logging.getLogger("gateway")
+    log.info("Aconex keys (shape only): %s", describe_keys())
+    if Policy.from_env().switched_off:
+        log.info("Gateway is SWITCHED OFF (GATEWAY_OFF): every Aconex tool refuses.")
     uvicorn.run(build_app(), host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))

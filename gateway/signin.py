@@ -30,6 +30,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlencode, urlsplit
 
@@ -57,6 +58,11 @@ LOGIN_TTL_S = 10 * 60          # time allowed at the Google/Microsoft login page
 CODE_TTL_S = 5 * 60            # gateway's one-time code, swapped by Claude for a pass
 ACCESS_TTL_S = 60 * 60         # a pass lasts an hour...
 REFRESH_TTL_S = 14 * 24 * 3600  # ...and renews automatically for two weeks
+
+# Anyone may register a sign-in client (Claude needs that), so registrations
+# are limited to this many in any 10 minutes across the whole gateway. A
+# registration on its own grants nothing: only approved people can sign in.
+REGISTRATIONS_PER_10_MIN = 30
 
 # Where Claude may ask for people to be sent back to after signing in.
 CLAUDE_CALLBACK = "https://claude.ai/api/mcp/auth_callback"
@@ -277,6 +283,7 @@ class GatewaySignIn:
         self.policy = policy
         self.audit = audit
         self.resource_url = resource_url
+        self._registrations: deque = deque()
 
     # client registration (Claude registers itself; only its own callbacks are accepted)
 
@@ -291,6 +298,13 @@ class GatewaySignIn:
                 error="invalid_redirect_uri",
                 error_description="This gateway only signs in Claude.",
             )
+        now = time.monotonic()
+        while self._registrations and self._registrations[0] <= now - 600:
+            self._registrations.popleft()
+        if len(self._registrations) >= REGISTRATIONS_PER_10_MIN:
+            raise RegistrationError(error="invalid_client_metadata",
+                                    error_description="Too many sign-in registrations. Try again shortly.")
+        self._registrations.append(now)
         self.store.run("INSERT OR REPLACE INTO clients VALUES (?, ?, ?)",
                        (client_info.client_id, client_info.model_dump_json(), time.time()))
 

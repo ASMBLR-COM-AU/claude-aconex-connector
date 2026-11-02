@@ -18,6 +18,8 @@ limits honestly, because a claim without its limits isn't worth much.
 | 7 | Everything is logged with a name on it | Every tool call, refusal, sign-in and download goes in the audit log (person, tool, project, arguments, outcome) | `tests/test_stage3.py` |
 | 8 | One off switch stops everything | `GATEWAY_OFF=1` | `tests/test_stage3.py` |
 | 9 | One person can't use up the company's Aconex limit | 30 requests a minute per person; the gateway as a whole stays under Aconex's limit | `tests/test_security.py` |
+| 11 | Hidden characters can't be smuggled to Claude | Everything Aconex sends back is cleaned first (`clean_tree`, `clean_value`, `html_to_text` in `gateway/aconex/parse.py`): invisible "tag" characters that can hide instructions an AI reads but a person can't see, right-to-left overrides that make "fdp.exe" look like "exe.pdf", zero-width characters and control characters | `tests/test_security.py` section 4 |
+| 12 | Outsiders learn nothing useful | The public `/health` page says only "ok". Every response tells browsers to use HTTPS only and not to run scripts or frame the pages. Sign-in registrations are limited to 30 in 10 minutes | `tests/test_security.py` section 4 |
 | 10 | Passes and links can't be reused from a stolen database | Passes, codes and links are stored only as hashes; passes last an hour and renewals retire the old one | `tests/test_stage4.py`, `tests/test_stage6.py` |
 
 ## Honest limits
@@ -63,4 +65,5 @@ Each attack review, what it tried, what it found and what changed.
 
 | Date | Who | Found | Fixed |
 |---|---|---|---|
+| 2 Nov 2026 | Independent review (separate Claude session; reviewed the skill's code by mistake, the live gateway from outside only) | Live gateway: `/health` showed version and off-switch state; no HTTPS-only (HSTS) or other security headers; open sign-in registration not limited. From the skill, applied to the gateway: hidden Unicode characters passed through to Claude | All fixed in 0.9.1. A full review of the gateway's own code is still to do |
 | 2 Nov 2026 | Self-review | Draft code described as "approval"; links reusable 5 times and a race between two downloads; no per-person limit; sign-in signature unchecked; personal Google accounts and Microsoft shared addresses not refused; no library vulnerability check | All fixed in 0.9.0 (this page) |

@@ -11,8 +11,10 @@ fly secrets set GATEWAY_OFF=1 -a aconex-gateway
 ```
 
 The machine restarts in a few seconds. Every Aconex tool then answers "switched
-off by IT" and nothing reaches Aconex. `https://aconex-gateway.fly.dev/health`
-shows `"switched_off": true`.
+off by IT" and nothing reaches Aconex. To confirm, run
+`fly logs -a aconex-gateway --no-tail`: after the restart it shows
+"Gateway is SWITCHED OFF". (The public `/health` page deliberately says only
+"ok", so outsiders learn nothing about the gateway's settings.)
 
 Turn it back on:
 

@@ -7,10 +7,50 @@ Shapes marked "live" were checked against the live API by the Aconex skill
 from __future__ import annotations
 
 import re
+import unicodedata
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 
 MAX_TEXT = 500  # longest single value passed back to Claude
+
+# Invisible or direction-changing characters are removed from everything
+# Aconex sends back, before Claude sees it: control characters, Unicode
+# "format" characters (right-to-left overrides, zero-width characters and the
+# invisible "tag" characters that can hide instructions readable by an AI but
+# not by a person), and line/paragraph separators. Ordinary new lines and tabs
+# are kept.
+_HIDDEN_CATEGORIES = ("Cc", "Cf", "Zl", "Zp")
+_ASCII_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def clean_text(value: str) -> str:
+    if value.isascii():
+        return _ASCII_CONTROLS.sub("", value)
+    return "".join(ch for ch in value
+                   if ch in "\n\t" or unicodedata.category(ch) not in _HIDDEN_CATEGORIES)
+
+
+def clean_tree(root: ET.Element) -> ET.Element:
+    """clean_text applied to every text, tail and attribute in an XML reply."""
+    for el in root.iter():
+        if el.text:
+            el.text = clean_text(el.text)
+        if el.tail:
+            el.tail = clean_text(el.tail)
+        for key, value in el.attrib.items():
+            el.attrib[key] = clean_text(value)
+    return root
+
+
+def clean_value(value):
+    """clean_text applied to every string (keys too) in a JSON reply."""
+    if isinstance(value, str):
+        return clean_text(value)
+    if isinstance(value, list):
+        return [clean_value(v) for v in value]
+    if isinstance(value, dict):
+        return {clean_text(str(k)): clean_value(v) for k, v in value.items()}
+    return value
 
 
 def text(el: ET.Element | None, path: str) -> str:
@@ -131,7 +171,8 @@ def html_to_text(markup: str) -> str:
     parser = _HTMLText()
     parser.feed(markup)
     parser.close()
-    out = "".join(parser.parts).replace("\xa0", " ")
+    # Entities such as &#8238; are only decoded here, so clean again.
+    out = clean_text("".join(parser.parts)).replace("\xa0", " ")
     out = re.sub(r"[ \t]+", " ", out)
     out = re.sub(r" *\n *", "\n", out)
     return re.sub(r"\n{3,}", "\n\n", out).strip()

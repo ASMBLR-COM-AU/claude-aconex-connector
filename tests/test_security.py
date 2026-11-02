@@ -250,3 +250,69 @@ def test_a_proper_sign_in_still_works():
         assert response.status_code == 200, response.text
         token = response.json()["access_token"]
         assert mcp(client, token, "tools/list").status_code == 200
+
+
+# ── 4. Found by the independent review, 2 Nov 2026 ──────────────────
+
+# (Raw control characters like ESC aren't allowed in XML at all; they're
+# tested in JSON and HTML entities below.)
+HIDDEN = "\u202e\u2066\u200b\u200d\ufeff\u2028\u2029\U000e0041\U000e0042"
+
+
+def test_hidden_characters_are_removed_from_aconex_xml():
+    from gateway.aconex.client import parse_xml
+    xml = (f'<Doc Title="Head{HIDDEN} Contractor"><Name>Sam{HIDDEN} Lee</Name>'
+           f'<Body>line one\nline\ttwo{HIDDEN}</Body></Doc>').encode()
+    root = parse_xml(xml)
+    assert root.get("Title") == "Head Contractor"
+    assert root.findtext("Name") == "Sam Lee"
+    assert root.findtext("Body") == "line one\nline\ttwo"  # new lines and tabs kept
+
+
+def test_hidden_characters_in_html_entities_are_removed_from_mail_bodies():
+    from gateway.aconex.parse import html_to_text
+    assert html_to_text("<p>Pay&#8238;fdp.exe &#917569;&#917570;now</p>") == "Payfdp.exe now"
+
+
+def test_hidden_characters_are_removed_from_json_and_file_names():
+    from gateway.aconex.client import file_name
+    from gateway.aconex.parse import clean_value
+    assert clean_value({f"k{HIDDEN}": [f"v{HIDDEN}\x1b[31m\x07", 1]}) == {"k": ["v[31m", 1]}
+    assert file_name("attachment; filename*=UTF-8''report%E2%80%AEfdp.exe") == "reportfdp.exe"
+
+
+def test_ordinary_text_in_other_languages_is_kept():
+    from gateway.aconex.parse import clean_text
+    for value in ("Café Ünïcödé", "日本語の図面", "Ελληνικά", "שלום"):
+        assert clean_text(value) == value
+
+
+def test_public_health_page_reveals_nothing():
+    from starlette.testclient import TestClient
+    from gateway.server import build_app
+    with TestClient(build_app(FakeAconex().client())) as client:
+        response = client.get("/health")
+    assert response.json() == {"status": "ok"}
+    assert response.headers["strict-transport-security"].startswith("max-age=31536000")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
+@pytestmark_signin
+def test_sign_in_registrations_are_limited():
+    from tests.test_stage4 import register
+    with http(app(FakeGoogle())) as client:
+        codes = [register(client).status_code for _ in range(32)]
+    assert codes[:30] == [201] * 30 and set(codes[30:]) == {400}
+
+
+def test_no_hidden_characters_in_the_gateways_own_files():
+    import pathlib
+    import unicodedata
+    root = pathlib.Path(__file__).resolve().parent.parent
+    for path in root.rglob("*"):
+        if path.suffix not in (".py", ".md", ".toml", ".yml", ".txt", ".ini") or ".git" in path.parts:
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            hidden = [hex(ord(c)) for c in line if unicodedata.category(c) in ("Cf", "Zl", "Zp")]
+            assert not hidden, f"{path.relative_to(root)}:{number} has hidden characters {hidden}"

@@ -20,7 +20,7 @@ from gateway.guard import AuditLog, Policy, public_url
 from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
 from gateway.tools import Gateway, drafts, files, mail, people, register
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 
 INSTRUCTIONS = (
     "Gateway to Oracle Aconex for this company. Every tool only reads, except "
@@ -87,8 +87,9 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
 
     @server.custom_route("/health", methods=["GET"])
     async def health(request: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok", "version": VERSION,
-                             "switched_off": gw.policy.switched_off})
+        # Public, so it says only that the gateway is up: no version or
+        # settings for an outsider to work from.
+        return JSONResponse({"status": "ok"})
 
     return server
 
@@ -103,10 +104,38 @@ def allowed_hosts() -> list[str]:
     return hosts
 
 
+SECURITY_HEADERS = [
+    # Browsers must only ever use HTTPS for this address (for a year).
+    (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
+    (b"x-content-type-options", b"nosniff"),
+    (b"referrer-policy", b"no-referrer"),
+    # Nothing here is meant to run scripts or be shown inside another site.
+    (b"content-security-policy", b"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"),
+    (b"x-frame-options", b"DENY"),
+]
+
+
+def with_security_headers(app):
+    """Adds SECURITY_HEADERS to every response."""
+    async def wrapped(scope, receive, send):
+        if scope["type"] != "http":
+            return await app(scope, receive, send)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                present = {k.lower() for k, _ in message.get("headers", [])}
+                message["headers"] = list(message.get("headers", [])) + [
+                    (k, v) for k, v in SECURITY_HEADERS if k not in present]
+            await send(message)
+        return await app(scope, receive, send_with_headers)
+    return wrapped
+
+
 def build_app(aconex: AconexClient | None = None, policy: Policy | None = None,
               audit: AuditLog | None = None, idp: IdentityProvider | None = None):
-    return build_server(aconex, policy, audit, idp).streamable_http_app(
+    app = build_server(aconex, policy, audit, idp).streamable_http_app(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts()),
     )
+    return with_security_headers(app)
