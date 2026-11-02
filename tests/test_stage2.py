@@ -253,6 +253,9 @@ def test_register_fields():
     status = next(f for f in data["fields"] if f["field"] == "statusid")
     assert status["values"] == ["For Review", "For Construction"]
     assert next(f for f in data["fields"] if f["field"] == "title") == {"field": "title", "name": "Title"}
+    # Each field once, the searchable (lower-case) version (live shape).
+    created_by = [f for f in data["fields"] if f["name"] == "Created By"]
+    assert created_by == [{"field": "author", "name": "Created By"}]
 
 
 def test_current_drawing_set_rule():
@@ -271,19 +274,32 @@ def test_transmittals_uses_the_gateway_account_ids():
     body = fake.calls[-1]["json"]
     assert body["orgId"] == "77" and body["userId"] == "900"
     assert body["returnTransmittalInfo"] is True
-    assert data["results"]["results"][0]["transmittals"][0]["mailNo"] == "TRANS-000042"
+    detail = data["results"]["searchResults"][0]["transmittalDetails"][0]
+    assert detail["recvTransmittalNum"] == "TRANS-000042"
+    assert detail["recvTransmittalDate"] == "2026-03-15T23:07:44+00:00"
 
 
 def test_saved_searches():
     _, data = call(FakeAconex(), "saved_register_searches", {"project_id": "1001"})
-    assert data["saved_searches"][0]["name"] == "Structural for construction"
+    assert data["saved_searches"] == [{"group": "Standard Searches", "name": "Approved", "id": "1",
+                                       "filters": {"doc_status_id": "1", "registered": "true"}}]
 
 
 def test_documents_changed_since_rounds_to_the_hour():
     fake = FakeAconex()
     _, data = call(fake, "documents_changed_since", {"project_id": "1001", "since": "2026-10-01T09:45"})
     assert fake.calls[-1]["params"]["everythingsince"] == "2026-10-01T09:00:00.000Z"
-    assert data["changes"][0]["document_id"] == "9001"
+    assert [c["document_id"] for c in data["changes"]] == ["9001", "9002"]  # child or attribute form
+
+
+def test_unreadable_changes_reply_reports_its_shape_not_its_data():
+    fake = FakeAconex()
+    fake.routes[("GET", "/projects/1001/register/integrity")] = (
+        b"<Integrity><Batch>secret-ish</Batch></Integrity>",)
+    _, data = call(fake, "documents_changed_since", {"project_id": "1001", "since": "2026-10-01"})
+    assert data["changes"] == []
+    assert "/Integrity/Batch" in data["unread_reply_shape"]
+    assert "secret-ish" not in str(data)
 
 
 def test_bad_date_is_a_plain_message():
@@ -340,7 +356,7 @@ def test_no_automatic_retry_without_words():
 def test_created_by_uses_the_projects_own_field():
     fake = FakeAconex()
     call(fake, "search_register", {"project_id": "1001", "created_by": "Acme Engineers"})
-    assert fake.calls[-1]["params"]["search_query"] == 'authororg:"Acme Engineers"'
+    assert fake.calls[-1]["params"]["search_query"] == 'author:"Acme Engineers"'
 
 
 def test_created_by_explains_when_a_project_has_no_such_field():

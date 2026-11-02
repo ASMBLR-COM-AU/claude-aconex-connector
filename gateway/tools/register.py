@@ -42,15 +42,54 @@ def parse_documents(root) -> list:
 
 def leaf_rows(root, limit: int) -> list:
     """Rows of a list response whose element names aren't confirmed: every
-    element that holds only plain values, flattened."""
+    element that holds only plain values (as child elements or attributes),
+    flattened."""
     rows = []
     for el in root.iter():
+        if el is root:
+            continue
         kids = list(el)
-        if el is not root and kids and all(len(list(k)) == 0 for k in kids):
+        if (kids and all(len(list(k)) == 0 for k in kids)) or (not kids and el.attrib):
             rows.append(flatten(el))
             if len(rows) >= limit:
                 break
     return rows
+
+
+def shape(root, depth: int = 3) -> list[str]:
+    """The structure of a reply (element and attribute names, never values),
+    returned when a reply can't be read, so the cause can be found."""
+    seen: list[str] = []
+
+    def walk(el, path: str, level: int) -> None:
+        here = f"{path}/{el.tag}" + (f"[{','.join(sorted(el.attrib))}]" if el.attrib else "")
+        if here not in seen:
+            seen.append(here)
+        if level < depth:
+            for kid in list(el)[:5]:
+                walk(kid, f"{path}/{el.tag}", level + 1)
+
+    walk(root, "", 0)
+    return seen[:30]
+
+
+def readable_dates(value):
+    """Aconex's JSON gives some dates as milliseconds since 1970; turn those
+    into ordinary dates. Everything else is left as it is."""
+    if isinstance(value, dict):
+        return {k: (datetime.fromtimestamp(int(v) / 1000, timezone.utc).isoformat()
+                    if k.lower().endswith("date") and str(v).isdigit() and len(str(v)) == 13
+                    else readable_dates(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [readable_dates(v) for v in value]
+    return value
+
+
+# Saved-search settings that are paging, versioning or plumbing, not filters.
+SAVED_SEARCH_PLUMBING = {"class", "page_no", "page_size", "max_results", "is_via_api",
+                         "ignore_refine_search_condition", "saved_search_version", "sort_dir",
+                         "search_mode", "exact_discipline", "exact_attribute"}
+SAVED_SEARCH_DEFAULTS = {"", "-1", "0", "false"}
 
 
 def empty_search_tips(searched_inside: bool, with_history: bool, filtered: bool) -> list[str]:
@@ -91,7 +130,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
         """The register field behind Aconex's "Created By" column. Its name
         isn't in Oracle's guides, so it's found in the project's register
         schema (to confirm live in stage 5)."""
-        fields = []
+        fields, matches = [], []
         for field in (await schema(project)).iter():
             identifier = text(field, "Identifier")
             if not identifier:
@@ -100,7 +139,11 @@ def register(server: MCPServer, gw: Gateway) -> None:
             fields.append(name or identifier)
             squashed = (identifier + " " + name).casefold().replace(" ", "").replace("_", "")
             if "createdby" in squashed:
-                return identifier
+                matches.append(identifier)
+        # The schema lists each field twice: once for registering (e.g. "Author")
+        # and once for searching (lower case, e.g. "author"). Search needs the latter (live).
+        if matches:
+            return next((m for m in matches if m == m.lower()), matches[-1])
         raise ToolError("This project's register has no Created By field to search. "
                         "Its fields: " + (", ".join(fields) or "none listed") + ".")
 
@@ -206,18 +249,24 @@ def register(server: MCPServer, gw: Gateway) -> None:
                        "(disciplines, types, statuses...). Use it to search with exact values.")
     async def register_fields(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/register/schema")
-        fields = []
+        by_name: dict[str, dict] = {}
         for field in root.iter():
             identifier = text(field, "Identifier")
-            if not identifier:
+            if not identifier or identifier in ("TempDocumentIds", "tempDocument", "id", "type"):
                 continue
+            name = first(field, "Name", "FieldName", "Label") or identifier
             values = [text(v, "Value") for v in field.iter("SchemaValue") if text(v, "Value")]
-            fields.append({
+            entry = {
                 "field": identifier,
-                "name": first(field, "Name", "FieldName", "Label"),
+                "name": name,
                 **({"values": values[:60], "more_values": max(0, len(values) - 60)} if values else {}),
-            })
-        return {"fields": fields}
+            }
+            # Each field appears twice (registering and searching). Keep the
+            # searchable, lower-case one (live).
+            current = by_name.get(name)
+            if current is None or (identifier[0].islower() and not current["field"][0].islower()):
+                by_name[name] = entry
+        return {"fields": list(by_name.values())}
 
     @read_tool(server, gw, "The rule that decides which documents count as the project's current "
                        "drawing set (for example by type and status).")
@@ -247,7 +296,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
             "resultSize": 25,
         })
         try:
-            return {"results": response.json()}
+            return {"results": readable_dates(response.json())}
         except ValueError:
             raise AconexError("Aconex sent back something unexpected for this search.") from None
 
@@ -255,7 +304,21 @@ def register(server: MCPServer, gw: Gateway) -> None:
                        "filters. Run one by passing its filters to search_register.")
     async def saved_register_searches(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/documents/savedSearch")
-        return {"saved_searches": [flatten(s) for s in root][:100]}
+        searches = []
+        for group in root:
+            label = group.get("label") or text(group, "Label") or group.tag
+            for found in group.iter("SavedSearch"):
+                row = flatten(found, limit=150)
+                filters = {}
+                for key, value in row.items():
+                    if ".search_query." not in key:
+                        continue
+                    setting = key.rsplit(".", 1)[-1]
+                    if setting not in SAVED_SEARCH_PLUMBING and value.strip().lower() not in SAVED_SEARCH_DEFAULTS:
+                        filters[setting] = value
+                searches.append({"group": label, "name": text(found, "Name"),
+                                 "id": text(found, "Id"), "filters": filters})
+        return {"saved_searches": searches[:100]}
 
     @read_tool(server, gw, "Documents that changed (or had something happen to them) since a date, "
                        "to answer questions like 'what's new this week'. Aconex works to the hour.")
@@ -264,7 +327,11 @@ def register(server: MCPServer, gw: Gateway) -> None:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/register/integrity", {
             "everythingsince": moment.strftime("%Y-%m-%dT%H:00:00.000Z"),
         })
-        return {"since": moment.isoformat(), "changes": leaf_rows(root, clamp(limit, 1, 500))}
+        changes = leaf_rows(root, clamp(limit, 1, 500))
+        result: dict = {"since": moment.isoformat(), "changes": changes}
+        if not changes and len(root):
+            result["unread_reply_shape"] = shape(root)
+        return result
 
     @read_tool(server, gw, "Links between related documents that were added or removed in a date range. "
                        "Aconex has no way to list every document related to one document.")
@@ -274,5 +341,6 @@ def register(server: MCPServer, gw: Gateway) -> None:
         params = {"from": start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                   "to": end.strftime("%Y-%m-%dT%H:%M:%S.000Z"), "page": 1}
         data = await aconex.get_json(
-            f"/document-relationships/projects/{seg(project_id, 'project ID')}/transactions", params)
+            f"/document-relationships/projects/{seg(project_id, 'project ID')}/transactions", params,
+            accept="*/*")
         return {"changes": data}

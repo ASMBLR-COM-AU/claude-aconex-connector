@@ -59,7 +59,10 @@ HISTORY = b"""<RegisterSearch TotalResults="3"><SearchResults>
   <Document DocumentId="7001"><DocumentNumber>S-1100A</DocumentNumber><Revision>1</Revision><RevisionDate>2026-08-01T00:00:00.000Z</RevisionDate></Document>
 </SearchResults></RegisterSearch>"""
 
+# Live shape (2 Nov 2026): every field appears twice, once for registering
+# (capitalised, e.g. Author) and once for searching (lower case, e.g. author).
 SCHEMA = b"""<RegisterSchema><SearchSchemaFields>
+  <SchemaField><Identifier>Author</Identifier><Name>Created By</Name></SchemaField>
   <SchemaField><Identifier>statusid</Identifier><Name>Status</Name><SchemaValues>
     <SchemaValue><Id>358</Id><Value>For Review</Value></SchemaValue>
     <SchemaValue><Id>359</Id><Value>For Construction</Value></SchemaValue>
@@ -68,7 +71,7 @@ SCHEMA = b"""<RegisterSchema><SearchSchemaFields>
     <SchemaValue><Id>1</Id><Value>Structural</Value></SchemaValue>
   </SchemaValues></SchemaField>
   <SchemaField><Identifier>title</Identifier><Name>Title</Name></SchemaField>
-  <SchemaField><Identifier>authororg</Identifier><Name>Created By</Name></SchemaField>
+  <SchemaField><Identifier>author</Identifier><Name>Created By</Name></SchemaField>
 </SearchSchemaFields></RegisterSchema>"""
 
 # Only found by searching the text on the drawings (content search).
@@ -91,14 +94,25 @@ EVENT_LOG = b"""<EventLog>
   <Event><Date>2026-10-21T02:00:00Z</Date><Type>Transmitted</Type><User>Jo Park</User></Event>
 </EventLog>"""
 
-TRANSMITTALS = {"results": [{"documentNumber": "S-1100", "transmittals": [{"mailNo": "TRANS-000042"}]}]}
+# Live shape (2 Nov 2026), with dates in milliseconds since 1970.
+TRANSMITTALS = {"searchResults": [{"id": 9001, "transmittalDetails": [{
+    "recvTransmittalNum": "TRANS-000042", "recvTransmittalUser": "Jo Park",
+    "recvTransmittalDate": "1773616064000"}]}], "totalResultsCount": 1}
 
-SAVED_SEARCHES = b"""<SavedSearches>
-  <SavedSearch><Name>Structural for construction</Name><Query>discipline:"Structural"</Query></SavedSearch>
-</SavedSearches>"""
+# Live shape (2 Nov 2026): groups, each holding saved searches whose filters
+# sit in a search query alongside paging and plumbing settings.
+SAVED_SEARCHES = b"""<SavedSearchGroups>
+  <SavedSearchGroup id="savedSearchesCommonGroup" label="Standard Searches" type="2"><SavedSearches>
+    <SavedSearch><Id>1</Id><Name>Approved</Name><SearchXmlString><SavedSearchObject><SearchQuery>
+      <PageSize>25</PageSize><MaxResults>2147483647</MaxResults><DocStatusId>1</DocStatusId>
+      <DocTypeId>-1</DocTypeId><Registered>true</Registered></SearchQuery></SavedSearchObject></SearchXmlString></SavedSearch>
+  </SavedSearches></SavedSearchGroup>
+  <SavedSearchGroup id="mySavedSearchesGroup" label="My Searches" type="1"/>
+</SavedSearchGroups>"""
 
 INTEGRITY = b"""<DocumentIntegrity>
   <Document><DocumentId>9001</DocumentId><LastModifiedDate>2026-10-30T03:00:00Z</LastModifiedDate></Document>
+  <Document DocumentId="9002" LastModifiedDate="2026-10-31T03:00:00Z"/>
 </DocumentIntegrity>"""
 
 RELATIONSHIP_CHANGES = [{"documentId": "9001", "relatedDocumentId": "9002", "action": "CREATED"}]
