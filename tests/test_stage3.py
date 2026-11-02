@@ -213,3 +213,13 @@ def test_key_shape_never_shows_the_values(monkeypatch):
     shape = describe_keys()
     assert "abc-client-123" not in shape and "super-secret-value" not in shape
     assert "14 characters" in shape and "18 characters" in shape
+
+
+def test_combined_login_in_the_secret_box_is_used(monkeypatch):
+    """What actually happened on 2 Nov 2026: the skill's combined login went in
+    the secret box and the Aconex username in the ID box."""
+    import base64 as b64
+    monkeypatch.setenv("ACONEX_CLIENT_ID", "lachie@asmblr.com.au")
+    monkeypatch.setenv("ACONEX_CLIENT_SECRET", b64.b64encode(b"my-client:my-secret").decode())
+    settings = Settings.from_env()
+    assert (settings.client_id, settings.client_secret) == ("my-client", "my-secret")

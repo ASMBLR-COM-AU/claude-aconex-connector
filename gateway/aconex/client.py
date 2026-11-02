@@ -84,9 +84,11 @@ class Settings:
         client_id, client_secret = _value("ACONEX_CLIENT_ID"), _value("ACONEX_CLIENT_SECRET")
         combined = _value("ACONEX_CREDENTIALS_B64") or _value("ACONEX_USERBOUND_CLIENT_CREDENTIALS_B64")
         # The Aconex skill's keys can be one base64 value of "client_id:secret".
-        # Use it when given on its own, or when it was pasted where the client
-        # ID goes (whatever is in the secret box is then not part of the login).
-        pair = _decode_pair(client_id) or (None if client_secret else _decode_pair(combined))
+        # Use it when given on its own, or when it was pasted into either the ID
+        # or the secret box (whatever is in the other box is then not part of
+        # the login; it's usually the Aconex username from the same file).
+        pair = (_decode_pair(client_id) or _decode_pair(client_secret)
+                or (None if client_secret else _decode_pair(combined)))
         if pair:
             client_id, client_secret = pair
         return cls(
