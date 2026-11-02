@@ -48,6 +48,17 @@ first and only write.
       appeared in Aconex › Mail › Drafts with the right signature, and he sent it
       from Aconex.
 
+## Added: "open in Aconex" links (2 Nov 2026)
+
+Lachie asked for a link with each reply. Saved drafts, every mail Claude reads,
+each mail search result and the original of a reply now carry an
+`open_in_aconex` link: `<Aconex site>/ViewCorrespondence?Correspondence_ID=<mail ID>`
+(the format in Aconex's help; the site is `ACONEX_WEB_URL` in `fly.toml`,
+`https://au1.aconex.com` for Australia).
+
+- [ ] Live: the link opens the draft in Aconex (the help calls the ID a
+      "Correspondence ID"; to confirm it is the API's mail ID).
+
 ## For the video
 
 Show the preview in claude.ai, the person saying yes, the DRAFT number, then

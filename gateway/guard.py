@@ -34,6 +34,17 @@ def public_url() -> str:
     return f"https://{host}" if host else "http://localhost:8080"
 
 
+def aconex_web_url() -> str:
+    """The company's Aconex website (its region), for links people can click."""
+    return (os.environ.get("ACONEX_WEB_URL", "").strip() or "https://au1.aconex.com").rstrip("/")
+
+
+def mail_link(mail_id: str) -> str:
+    """A link that opens a mail (or draft) in the Aconex website. Format from
+    Aconex's help ("ViewCorrespondence?Correspondence_ID="), checked live."""
+    return f"{aconex_web_url()}/ViewCorrespondence?Correspondence_ID={mail_id}"
+
+
 def _list(name: str) -> frozenset[str]:
     return frozenset(v.strip().lower() for v in os.environ.get(name, "").split(",") if v.strip())
 

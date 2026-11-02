@@ -24,6 +24,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from gateway.aconex import AconexError, seg
 from gateway.aconex.parse import first, html_to_text, lucene_phrase, page_info, person, text
+from gateway.guard import mail_link
 from gateway.tools import Gateway, clamp, current_person, parse_when, read_tool
 from gateway.tools.files import LINK_TTL_S, FileLinks
 from gateway.tools.register import leaf_rows, page_size, parse_saved_searches
@@ -64,6 +65,7 @@ def parse_mail_list(root, box: str) -> list:
                 "from": person(m.find("FromUserDetails")),
                 "subject": text(m, "Subject"),
                 "box": box,
+                "open_in_aconex": mail_link(mail_id),
             })
     return mails
 
@@ -110,6 +112,7 @@ def parse_mail(root, mail_id: str, attachments_page: int = 1) -> dict:
     recipients = parse_recipients(root)
     mail = {
         "mail_id": mail_id,
+        "open_in_aconex": mail_link(mail_id),
         "number": text(root, ".//MailNo"),
         "type": text(root, ".//CorrespondenceType"),
         "subject": text(root, ".//Subject"),
@@ -240,11 +243,11 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
 
     @read_tool(server, gw,
                "Read one mail in full: sender, To/Cc/Bcc, type, subject, date, status, the message "
-               "text and its attachments (with attachment IDs for get_mail_attachment), 50 "
+               "text, its attachments (with attachment IDs for get_mail_attachment), 50 "
                "attachments at a time "
                "(attachments_page for more). Give mail_number (e.g. LSGP-TRANSMIT-000143) or a "
                "mail_id from search_mail. A transmittal with thousands of attachments can take "
-               "a minute to load.")
+               "a minute to load. Give the person the open_in_aconex link so they can open it.")
     async def read_mail(project_id: str, mail_number: str = "", mail_id: str = "",
                         attachments_page: int = 1) -> dict:
         project = seg(project_id, "project ID")

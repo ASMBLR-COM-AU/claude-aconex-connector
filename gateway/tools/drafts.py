@@ -31,6 +31,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from gateway.aconex import seg
+from gateway.guard import mail_link
 from gateway.aconex.parse import first, flatten, html_to_text, lucene_phrase, schema_values, text
 from gateway.tools import WRITES_DRAFT, Gateway, current_person, read_tool
 from gateway.tools.mail import ACCEPT_MAIL, RETURN_FIELDS as MAIL_FIELDS, parse_mail, parse_mail_list
@@ -234,7 +235,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
             raise ToolError("Give a mail_type (this project's names are in mail_fields).")
         to, cc, bcc = list(to or []), list(cc or []), list(bcc or [])
 
-        reply_id, reply_note = "", ""
+        reply_id, reply_note, reply_link = "", "", ""
         if reply_to_mail_number.strip():
             reply_id = await find_mail(project, reply_to_mail_number, ("Inbox", "Sentbox"))
             original = parse_mail(await aconex.get_xml(f"/projects/{project}/mail/{reply_id}",
@@ -248,6 +249,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
                 subject = (original["subject"] if re.match(r"(?i)re:", original["subject"])
                            else f"RE: {original['subject']}")
             reply_note = f"Reply to {original['number']}: {original['subject']} (from {original['from']})"
+            reply_link = mail_link(reply_id)
         if not subject.strip():
             raise ToolError("The draft needs a subject.")
 
@@ -283,7 +285,7 @@ def register(server: MCPServer, gw: Gateway) -> None:
         }
         preview = {
             "status": "PREVIEW: nothing has been saved to Aconex.",
-            **({"reply_to": reply_note} if reply_note else {}),
+            **({"reply_to": reply_note, "original_in_aconex": reply_link} if reply_note else {}),
             **({"replaces_draft": replace_draft_number} if replace_id else {}),
             "from": "the company's gateway account in Aconex; the person sends it from their own "
                     "Aconex account after opening the draft",
@@ -307,8 +309,8 @@ def register(server: MCPServer, gw: Gateway) -> None:
                "Save the draft the person approved, as an UNSENT draft in Aconex. Only call this "
                "after the person has seen the preview from prepare_draft and said yes. Give the "
                "approval_code from prepare_draft; the draft saved is exactly the one previewed. "
-               "Nothing is sent: tell the person to open Aconex > Mail > Drafts, check it and "
-               "press Send there.", annotations=WRITES_DRAFT)
+               "Nothing is sent: give the person the open_in_aconex link to open the draft in "
+               "Aconex, check it and press Send there.", annotations=WRITES_DRAFT)
     async def save_draft(project_id: str, approval_code: str) -> dict:
         project = seg(project_id, "project ID")
         draft = approvals.take(approval_code, current_person(), project)
@@ -325,7 +327,9 @@ def register(server: MCPServer, gw: Gateway) -> None:
         result = {
             "saved": f"Saved as unsent draft {number or mail_id}. It has NOT been sent.",
             "draft_number": number, "mail_id": mail_id,
-            "next_step": "Open Aconex > Mail > Drafts, check the draft and press Send there.",
+            "open_in_aconex": mail_link(mail_id),
+            "next_step": "Give the person the open_in_aconex link: they open the draft in Aconex, "
+                         "check it and press Send there (or find it in Mail > Drafts).",
             "subject": draft["preview"]["subject"], "to": draft["preview"]["to"],
         }
         if draft["doc_ids"]:

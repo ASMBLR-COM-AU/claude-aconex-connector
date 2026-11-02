@@ -14,6 +14,8 @@ primary_region = "syd"
   # Company sign-in service. Google by default; for Microsoft see docs/runbook.md.
   # SIGNIN_CLIENT_ID and SIGNIN_CLIENT_SECRET are Fly secrets, never in this file.
   SIGNIN_ISSUER = "https://accounts.google.com"
+  # The company's Aconex website, for "open in Aconex" links (au1 = Australia).
+  ACONEX_WEB_URL = "https://au1.aconex.com"
 
 # Encrypted 1 GB volume for the audit log, with daily snapshots kept 5 days.
 [mounts]
