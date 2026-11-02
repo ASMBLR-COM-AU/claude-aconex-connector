@@ -9,11 +9,11 @@ never sees the keys.
 
 ## Current stage
 
-Stage 3: 19 read-only tools for projects, people and the document register,
-behind an audit log, an approved-project list, an off switch and request
-pacing. Tested against a fake Aconex; no real Aconex keys yet. See
-[docs/stages/](docs/stages/) for each stage and [docs/runbook.md](docs/runbook.md)
-for operating it.
+Stage 4: 19 read-only tools for projects, people and the document register,
+behind company sign-in (Google or Microsoft), an audit log, approved projects
+and people, an off switch and request pacing. Tested against a fake Aconex;
+no real Aconex keys yet. See [docs/stages/](docs/stages/) for each stage and
+[docs/runbook.md](docs/runbook.md) for operating it.
 
 ## Run it on your computer
 
@@ -23,6 +23,9 @@ python -m venv .venv
 .venv/bin/python -m pytest          # run the tests
 .venv/bin/python -m gateway         # start it on http://localhost:8080
 ```
+
+Sign-in is always on. To try it on your own computer without sign-in, set
+`GATEWAY_NO_SIGNIN=1` first; never set it on Fly.
 
 The menu Claude sees is at `/mcp`; `/health` says whether it's running.
 

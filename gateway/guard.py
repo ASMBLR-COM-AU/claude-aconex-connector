@@ -3,6 +3,8 @@
 - Audit log: who asked for what, on which project, and how it went. Kept in a
   small database file (on an encrypted Fly volume) and echoed to Fly's logs.
 - Approved projects: tools only work on projects IT has switched on.
+- Approved people: only these emails (or everyone at these domains) can sign
+  in (stage 4).
 - Off switch: one setting turns every tool off.
 
 All three are read from the environment when the gateway starts, so they are
@@ -22,24 +24,36 @@ from datetime import datetime, timezone
 
 log = logging.getLogger("gateway.audit")
 
-UNKNOWN_PERSON = "unknown (sign-in arrives in stage 4)"
+UNKNOWN_PERSON = "not signed in (local test)"
 MAX_ARGUMENTS_CHARS = 1000
+
+
+def _list(name: str) -> frozenset[str]:
+    return frozenset(v.strip().lower() for v in os.environ.get(name, "").split(",") if v.strip())
 
 
 @dataclass(frozen=True)
 class Policy:
     allowed_projects: frozenset[str] = field(default_factory=frozenset)
     switched_off: bool = False
+    allowed_emails: frozenset[str] = field(default_factory=frozenset)
+    allowed_domains: frozenset[str] = field(default_factory=frozenset)
 
     @classmethod
     def from_env(cls) -> "Policy":
-        raw = os.environ.get("ALLOWED_PROJECTS", "")
-        projects = frozenset(p.strip() for p in raw.split(",") if p.strip())
         off = os.environ.get("GATEWAY_OFF", "").strip().lower() in ("1", "true", "yes", "on")
-        return cls(allowed_projects=projects, switched_off=off)
+        return cls(allowed_projects=_list("ALLOWED_PROJECTS"), switched_off=off,
+                   allowed_emails=_list("ALLOWED_EMAILS"),
+                   allowed_domains=_list("ALLOWED_DOMAINS"))
 
     def project_allowed(self, project_id: str) -> bool:
-        return str(project_id).strip() in self.allowed_projects
+        return str(project_id).strip().lower() in self.allowed_projects
+
+    def person_allowed(self, email: str) -> bool:
+        email = email.strip().lower()
+        if "@" not in email:
+            return False
+        return email in self.allowed_emails or email.rsplit("@", 1)[1] in self.allowed_domains
 
 
 class AuditLog:

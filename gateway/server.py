@@ -1,13 +1,14 @@
 """The Aconex Gateway: an MCP server that Claude connects to as a custom connector.
 
-Stage 3: read-only tools for projects, people and the document register,
-behind the gateway's controls (audit log, approved projects, off switch,
-request pacing). Every tool on the menu is listed in docs/features.md;
-anything not on the menu can't be done.
+Stage 4: read-only tools for projects, people and the document register,
+behind sign-in (gateway/signin.py) and the gateway's controls (audit log,
+approved projects and people, off switch, request pacing). Every tool on the
+menu is listed in docs/features.md; anything not on the menu can't be done.
 """
 
 import os
 
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
@@ -15,9 +16,10 @@ from starlette.responses import JSONResponse
 
 from gateway.aconex import AconexClient, Settings
 from gateway.guard import AuditLog, Policy
+from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
 from gateway.tools import Gateway, people, register
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 INSTRUCTIONS = (
     "Gateway to Oracle Aconex for this company. Every tool only reads. "
@@ -28,14 +30,44 @@ INSTRUCTIONS = (
 )
 
 
+def public_url() -> str:
+    host = os.environ.get("PUBLIC_HOST", "").strip()
+    return f"https://{host}" if host else "http://localhost:8080"
+
+
+def signin_required() -> bool:
+    """Sign-in is always on, except when explicitly turned off for local
+    testing on someone's own computer."""
+    return os.environ.get("GATEWAY_NO_SIGNIN", "").strip() != "1"
+
+
 def build_server(aconex: AconexClient | None = None, policy: Policy | None = None,
-                 audit: AuditLog | None = None) -> MCPServer:
-    server = MCPServer(name="aconex-gateway", version=VERSION, instructions=INSTRUCTIONS)
+                 audit: AuditLog | None = None, idp: IdentityProvider | None = None) -> MCPServer:
     gw = Gateway(
         aconex=aconex or AconexClient(Settings.from_env()),
         policy=policy or Policy.from_env(),
         audit=audit or AuditLog.from_env(),
     )
+    signin = None
+    auth = None
+    if signin_required():
+        base = public_url()
+        signin = GatewaySignIn(
+            store=SignInStore(os.environ.get("AUDIT_DB", "audit.db")),
+            idp=idp or IdentityProvider(IdentitySettings.from_env(), callback_url=base + "/auth/callback"),
+            policy=gw.policy,
+            audit=gw.audit,
+            resource_url=base + "/mcp",
+        )
+        auth = AuthSettings(
+            issuer_url=base,
+            resource_server_url=base + "/mcp",
+            validate_token_resource=True,
+            client_registration_options=ClientRegistrationOptions(enabled=True),
+            revocation_options=RevocationOptions(enabled=True),
+        )
+    server = MCPServer(name="aconex-gateway", version=VERSION, instructions=INSTRUCTIONS,
+                       auth_server_provider=signin, auth=auth)
 
     @server.tool(description="Check the gateway is reachable. Returns a short message.")
     def ping() -> str:
@@ -43,6 +75,9 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
 
     people.register(server, gw)
     register.register(server, gw)
+
+    if signin:
+        server.custom_route("/auth/callback", methods=["GET"])(signin.callback)
 
     @server.custom_route("/health", methods=["GET"])
     async def health(request: Request) -> JSONResponse:
@@ -63,8 +98,8 @@ def allowed_hosts() -> list[str]:
 
 
 def build_app(aconex: AconexClient | None = None, policy: Policy | None = None,
-              audit: AuditLog | None = None):
-    return build_server(aconex, policy, audit).streamable_http_app(
+              audit: AuditLog | None = None, idp: IdentityProvider | None = None):
+    return build_server(aconex, policy, audit, idp).streamable_http_app(
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts()),

@@ -99,7 +99,7 @@ def test_every_call_is_logged_with_its_outcome():
     assert '"words": "slab"' in older["arguments"] and older["project"] == "1001"
     assert newest["tool"] == "document_details" and newest["outcome"] == "error"
     assert "not found" in newest["detail"]
-    assert newest["person"].startswith("unknown")  # sign-in arrives in stage 4
+    assert newest["person"] == "not signed in (local test)"  # sign-in is off in these tests
 
 
 def test_audit_log_survives_a_restart(tmp_path):

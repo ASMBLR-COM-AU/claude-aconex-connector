@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -34,6 +35,12 @@ class Gateway:
     audit: AuditLog
 
 
+def current_person() -> str:
+    """The signed-in person's email (stage 4), from the pass Claude presented."""
+    token = get_access_token()
+    return (token.subject if token and token.subject else UNKNOWN_PERSON)
+
+
 def not_approved(project_id: str) -> str:
     return (f"Project {project_id} isn't switched on for the gateway. Ask IT to approve it, "
             "or use list_projects to see the projects that are.")
@@ -46,10 +53,11 @@ def read_tool(server: MCPServer, gw: Gateway, description: str):
         @functools.wraps(fn)
         async def wrapper(**kwargs):
             project = str(kwargs.get("project_id", "") or "").strip()
+            person = current_person()
             started = time.monotonic()
 
             def audit(outcome: str, detail: str = "") -> None:
-                gw.audit.record(person=UNKNOWN_PERSON, tool=fn.__name__, project=project,
+                gw.audit.record(person=person, tool=fn.__name__, project=project,
                                 arguments=kwargs, outcome=outcome, detail=detail,
                                 ms=int((time.monotonic() - started) * 1000))
 

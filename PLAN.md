@@ -41,9 +41,8 @@ Staff member ──(work login)──▶ Claude (Team or Enterprise)
 
 ## Still to decide
 
-- **Sign-in provider (stage 4).** How staff prove who they are. Likely the
-  company's existing Microsoft 365 or Google Workspace login (free to use for
-  sign-in), or a small service with a free tier.
+- Nothing open right now. Sign-in (stage 4) uses Google Workspace for testing
+  and supports Microsoft Entra ID by settings alone.
 
 ## The stages
 
