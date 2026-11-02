@@ -312,7 +312,12 @@ def test_no_hidden_characters_in_the_gateways_own_files():
     import pathlib
     import unicodedata
     root = pathlib.Path(__file__).resolve().parent.parent
-    for path in root.rglob("*"):
+    # Scan only the gateway's OWN files, not a virtualenv or other tooling that
+    # may live under the repo (those legitimately contain zero-width characters).
+    own = ["gateway", "tests", "docs", "scripts", "deploy", ".github"]
+    paths = [p for folder in own for p in (root / folder).rglob("*")]
+    paths += [p for p in root.glob("*") if p.is_file()]  # top-level config files
+    for path in paths:
         if path.suffix not in (".py", ".md", ".toml", ".yml", ".txt", ".ini") or ".git" in path.parts:
             continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

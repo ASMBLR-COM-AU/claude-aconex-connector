@@ -49,6 +49,15 @@ limits honestly, because a claim without its limits isn't worth much.
   gateway's Aconex account can see (a deliberate choice, for tracing issues).
   Confidential mail stays hidden by Aconex. Every search and mail opened is
   logged under the person.
+- **Aconex-wide people and companies.** The approved-projects list limits the
+  document register and mail, but the directory and company lookups
+  (`search_aconex_directory`, `get_company`, and `get_person` without a
+  project) are not limited to approved projects: any approved person can look
+  up any company or person the gateway's Aconex account can see across Aconex.
+  That's the same reach Aconex itself gives that account, and every lookup is
+  logged under the person. Flagged in the 2 Nov 2026 independent review; left
+  open on purpose for now (it can be put behind a switch if a company wants it
+  restricted).
 - **The audit log is on the same server.** Someone with server access could
   change it. Shipping it somewhere the server can't edit is on the list.
 - **Not yet tested live:** Microsoft sign-in, Claude Enterprise, a refused
@@ -67,3 +76,4 @@ Each attack review, what it tried, what it found and what changed.
 |---|---|---|---|
 | 2 Nov 2026 | Independent review (separate Claude session; reviewed the skill's code by mistake, the live gateway from outside only) | Live gateway: `/health` showed version and off-switch state; no HTTPS-only (HSTS) or other security headers; open sign-in registration not limited. From the skill, applied to the gateway: hidden Unicode characters passed through to Claude | All fixed in 0.9.1. A full review of the gateway's own code is still to do |
 | 2 Nov 2026 | Self-review | Draft code described as "approval"; links reusable 5 times and a race between two downloads; no per-person limit; sign-in signature unchecked; personal Google accounts and Microsoft shared addresses not refused; no library vulnerability check | All fixed in 0.9.0 (this page) |
+| 2 Nov 2026 | Independent review (gateway code, offline against the fakes; live site not reachable from the review environment) | Aconex-wide directory/company lookups aren't limited to approved projects; sign-in registration was one global limit whose rows were never cleaned (lock-out + unbounded growth); failed sign-ins weren't logged; the JWT/crypto libraries weren't pinned. Full report: `docs/attacks/2026-11-02-gateway-review.md` | Registration now limited per source address with a bounded table; failed sign-ins logged; crypto libraries pinned; Aconex-wide reach documented above. Directory/company scoping left as a product decision |
