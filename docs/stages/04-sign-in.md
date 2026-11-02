@@ -52,9 +52,11 @@ the audit log and, in stage 7, the mail filter.
       refused when not approved, unverified, or for another app; only Claude
       can register; renewals retire old passes; removal cuts off; passes stored
       scrambled; `/health` stays public.
-- [ ] Live with Google: Lachie connects from Claude and the audit log shows
-      `lachie@asmblr.com.au` (needs the Google setup in the runbook).
-- [ ] Works when added on a Claude **Team** account and an **Enterprise** account.
+- [x] Live with Google (2 Nov 2026): Lachie connected from Claude, and the
+      audit log shows `sign-in ok lachie@asmblr.com.au`, then a tool call
+      under the same email.
+- [x] Works when added on a Claude **Team** account (2 Nov 2026).
+- [ ] Works on an **Enterprise** account (needs access to one).
 - [ ] Someone not approved is refused (live).
 
 ## Not done yet
