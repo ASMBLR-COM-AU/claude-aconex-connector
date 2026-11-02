@@ -62,8 +62,10 @@ REFRESH_TTL_S = 14 * 24 * 3600  # ...and renews automatically for two weeks
 # on its own grants nothing: only approved people can sign in. Two safeguards
 # keep that openness from being abused: the server rate limits /register per
 # source address (with_registration_limit in gateway/server.py), and the stored
-# registrations are capped here so the table can't grow without bound - the
-# oldest are dropped first.
+# registrations NEVER used to sign in are capped here, oldest dropped first, so
+# a flood can't grow the table without bound. A registration someone is signed
+# in with, or is part-way through signing in with, is never dropped: otherwise
+# a flood of fake registrations would sign real people out.
 MAX_CLIENTS = 1000
 
 # Where Claude may ask for people to be sent back to after signing in.
@@ -301,12 +303,17 @@ class GatewaySignIn:
             )
         self.store.run("INSERT OR REPLACE INTO clients VALUES (?, ?, ?)",
                        (client_info.client_id, client_info.model_dump_json(), time.time()))
-        # Keep only the most recent MAX_CLIENTS registrations, so a flood of
-        # registrations can't grow this table without bound. (Per-source rate
+        # Keep at most MAX_CLIENTS registrations that have never been used,
+        # dropping the oldest unused first. In-use ones (a pass, a pending
+        # code, or a sign-in under way) are never dropped. (Per-source rate
         # limiting lives in the server layer; see with_registration_limit.)
         self.store.run(
-            "DELETE FROM clients WHERE client_id NOT IN "
-            "(SELECT client_id FROM clients ORDER BY created DESC LIMIT ?)", (MAX_CLIENTS,))
+            "DELETE FROM clients WHERE client_id IN ("
+            "  SELECT client_id FROM clients WHERE client_id NOT IN ("
+            "    SELECT json_extract(data, '$.client_id') AS c FROM tokens WHERE c IS NOT NULL"
+            "    UNION SELECT json_extract(data, '$.client_id') AS c FROM codes WHERE c IS NOT NULL"
+            "    UNION SELECT client_id FROM logins WHERE client_id IS NOT NULL)"
+            "  ORDER BY created DESC LIMIT -1 OFFSET ?)", (MAX_CLIENTS,))
 
     # sign-in: off to Google/Microsoft, and back
 

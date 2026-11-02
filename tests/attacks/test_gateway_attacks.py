@@ -331,13 +331,14 @@ def test_registration_is_limited_per_source_and_the_table_is_bounded(signin_env,
     monkeypatch.setattr(signin_mod, "MAX_CLIENTS", 5)  # tiny cap to show eviction
     google = FakeGoogle()
     with http(app(google)) as client:
-        flood = [_register_as(client, "9.9.9.9").status_code for _ in range(31)]
-        # One source is capped at 30, then refused with 429 (not a global lockout):
-        assert flood[:30] == [201] * 30 and flood[30] == 429
+        from gateway.server import SIGNIN_STARTS_PER_10_MIN_PER_IP as limit
+        flood = [_register_as(client, "9.9.9.9").status_code for _ in range(limit + 1)]
+        # One source is capped at the limit, then refused with 429 (not a global lockout):
+        assert flood[:limit] == [201] * limit and flood[limit] == 429
         # A DIFFERENT source is NOT locked out by the first one's flood:
         assert _register_as(client, "8.8.8.8").status_code == 201
 
-    # Despite ~31 successful registrations, the table stayed bounded at the cap:
+    # Despite many successful registrations, the table stayed bounded at the cap:
     import os
     con = sqlite3.connect(os.environ["AUDIT_DB"])
     try:
@@ -359,3 +360,56 @@ def test_per_person_tool_limit_is_in_memory_only():
     assert [a.allow("p@x.com") for _ in range(4)] == [True, True, True, False]
     b = PersonLimit(per_minute=3)  # a "restart": fresh limiter, counter forgotten
     assert b.allow("p@x.com") is True
+
+
+# ── Follow-up to the review's fixes (found while reviewing them) ────────────
+
+def test_a_registration_flood_never_signs_out_a_real_user(signin_env, monkeypatch):
+    """The cap on stored registrations must only drop UNUSED ones. Before this
+    follow-up it dropped the oldest, so a flood signed real people out (their
+    renewal failed with invalid_client)."""
+    from gateway import signin as signin_mod
+    monkeypatch.setattr(signin_mod, "MAX_CLIENTS", 5)
+    google = FakeGoogle()
+    with http(app(google)) as client:
+        client_id, tokens = sign_in(client, google)
+        refresh = tokens.json()["refresh_token"]
+        for i in range(12):
+            assert _register_as(client, f"203.0.113.{i}").status_code == 201
+        renewed = client.post("/token", data={"grant_type": "refresh_token",
+                                              "refresh_token": refresh, "client_id": client_id})
+    assert renewed.status_code == 200, renewed.text
+    import os
+    con = sqlite3.connect(os.environ["AUDIT_DB"])
+    try:  # the flood itself stayed bounded: 5 unused + the real user's
+        assert con.execute("SELECT COUNT(*) FROM clients").fetchone()[0] == 6
+    finally:
+        con.close()
+
+
+def test_starting_sign_ins_is_limited_per_source_too(signin_env, monkeypatch):
+    """GET /authorize creates a pending sign-in (and a cancelled one is
+    audited), so it shares the per-source limit with /register."""
+    import gateway.server as server_mod
+    monkeypatch.setattr(server_mod, "SIGNIN_STARTS_PER_10_MIN_PER_IP", 3)
+    google = FakeGoogle()
+    with http(app(google)) as client:
+        client.headers["Fly-Client-IP"] = "192.0.2.7"
+        codes = [client.get("/authorize", params={"client_id": "x"}).status_code for _ in range(4)]
+    assert codes[-1] == 429 and 429 not in codes[:3]
+
+
+def test_ipv6_addresses_count_per_slash_64():
+    from gateway.server import _source_ip
+    one = {"headers": [(b"fly-client-ip", b"2001:db8:1:2::1")]}
+    other_in_same_64 = {"headers": [(b"fly-client-ip", b"2001:db8:1:2:ffff::9")]}
+    different_64 = {"headers": [(b"fly-client-ip", b"2001:db8:1:3::1")]}
+    assert _source_ip(one) == _source_ip(other_in_same_64) != _source_ip(different_64)
+    assert _source_ip({"headers": [(b"fly-client-ip", b"198.51.100.4")]}) == "198.51.100.4"
+    assert _source_ip({"headers": [], "client": ("127.0.0.1", 5)}) == "127.0.0.1"
+
+
+def test_if_there_are_several_address_headers_the_last_one_counts():
+    from gateway.server import _source_ip
+    scope = {"headers": [(b"fly-client-ip", b"1.1.1.1"), (b"fly-client-ip", b"198.51.100.4")]}
+    assert _source_ip(scope) == "198.51.100.4"
