@@ -9,11 +9,11 @@ never sees the keys.
 
 ## Current stage
 
-Stage 6: read-only tools for projects, people and the document register, and
-the real files (PDF, DWG) on command,
-behind company sign-in (Google or Microsoft), an audit log, approved projects
-and people, an off switch and request pacing. Tested against a fake Aconex;
-no real Aconex keys yet. See [docs/stages/](docs/stages/) for each stage and
+Stage 6 done: read-only tools for projects, people and the document register,
+plus the real files (PDF, DWG) on command, behind company sign-in (Google or
+Microsoft), an audit log, approved projects and people, an off switch and
+request pacing. Running against the real Aconex on one test project with a
+testing key. See [docs/stages/](docs/stages/) for each stage and
 [docs/runbook.md](docs/runbook.md) for operating it.
 
 ## Run it on your computer
