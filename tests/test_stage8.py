@@ -24,7 +24,7 @@ def shared_db(monkeypatch, tmp_path):
 
 
 def session(fake, steps, policy=APPROVED):
-    """Run several tool calls on one gateway (so approval codes carry over)."""
+    """Run several tool calls on one gateway (so preview codes carry over)."""
     async def run():
         out = []
         async with Client(build_server(fake.client(), policy, AuditLog(":memory:"))) as c:
@@ -57,7 +57,7 @@ def test_prepare_saves_nothing_and_previews_with_signature():
     assert preview["reason_for_issue"] == "Issued for Information"
     assert preview["message"].endswith(
         "Regards,\nLachie Barnett\nDirector\nASMBLR\n0410 004 180\nlachie@asmblr.com.au")
-    assert preview["approval_code"]
+    assert preview["preview_code"]
 
 
 def test_ambiguous_or_unknown_recipient_is_explained():
@@ -89,9 +89,9 @@ def test_reply_defaults_to_the_sender_and_RE_subject():
 def test_save_uses_the_approved_draft_exactly_and_only_as_a_draft():
     fake = FakeAconex()
     results = session(fake, [("prepare_draft", {**DRAFT, "mail_type": "Transmittal", "attach_documents": ["S-1100"]})])
-    code = results[0][1]["approval_code"]
+    code = results[0][1]["preview_code"]
     # A fresh gateway on the same database, as after a restart: the code still works.
-    [(err, saved)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": code})])
+    [(err, saved)] = session(fake, [("save_draft", {"project_id": "1001", "preview_code": code})])
     assert not err, saved
     assert saved["draft_number"] == "DRAFT-000001" and "NOT been sent" in saved["saved"]
     [post] = posts(fake)
@@ -108,7 +108,7 @@ def test_reply_draft_goes_to_the_reply_address():
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", {"project_id": "1001", "mail_type": "Transmittal",
                                                  "message": "Received.", "reply_to_mail_number": "LSGP-TRANSMIT-000143"})])
-    session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})])
+    session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})])
     assert posts(fake)[0]["path"] == "/projects/1001/mail/m1/reply"
 
 
@@ -116,21 +116,21 @@ def test_replacing_a_draft_sends_its_id():
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", {**DRAFT, "replace_draft_number": "DRAFT-000009"})])
     assert p["replaces_draft"] == "DRAFT-000009"
-    session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})])
+    session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})])
     assert "<ExistingMailId>d9</ExistingMailId>" in posts(fake)[0]["json"]
 
 
 def test_code_works_once():
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", DRAFT)])
-    first, second = session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})] * 2)
+    first, second = session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})] * 2)
     assert not first[0] and second[0] and "isn't valid" in second[1]
     assert len(posts(fake)) == 1
 
 
 def test_made_up_code_saves_nothing():
     fake = FakeAconex()
-    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": "made-up"})])
+    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "preview_code": "made-up"})])
     assert err and posts(fake) == []
 
 
@@ -138,14 +138,14 @@ def test_someone_else_cannot_use_my_code(monkeypatch):
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", DRAFT)])
     monkeypatch.setattr(drafts_module, "current_person", lambda: "someone@asmblr.com.au")
-    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})])
+    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})])
     assert err and "someone else's draft" in text and posts(fake) == []
 
 
 def test_off_switch_stops_saving():
     fake = FakeAconex()
     [(_, p)] = session(fake, [("prepare_draft", DRAFT)])
-    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})],
+    [(err, text)] = session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})],
                             policy=Policy(allowed_projects=frozenset({"1001"}), switched_off=True))
     assert err and "switched off" in text and posts(fake) == []
 
@@ -181,7 +181,7 @@ def test_saved_draft_comes_with_a_link_to_open_it():
                                                  "message": "Received.", "reply_to_mail_number": "LSGP-TRANSMIT-000143"})])
     assert p["original_in_aconex"] == ("https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=m1"
                                        "&CORRESPONDENCE_MAILBOX=1&PROJECT_ID=1001")
-    [(_, saved)] = session(fake, [("save_draft", {"project_id": "1001", "approval_code": p["approval_code"]})])
+    [(_, saved)] = session(fake, [("save_draft", {"project_id": "1001", "preview_code": p["preview_code"]})])
     assert saved["open_in_aconex"] == ("https://au1.aconex.com/ViewCorrespondence?Correspondence_ID=d1"
                                        "&CORRESPONDENCE_MAILBOX=2&PROJECT_ID=1001")  # 2 = Drafts
 

@@ -10,9 +10,11 @@ works in claude.ai (once the gateway's address is on the organisation's
 allowed domains, see the runbook), Claude Code and Cowork. Anywhere else, the
 person can click the link.
 
-Links: each is random, stored as a hash, tied to one file and the person who
-asked, works for 15 minutes and at most 5 downloads, and re-checks the off
-switch, the approved project and the approved person when used.
+Links: each is random (256 bits), stored as a hash, tied to one file, works
+ONCE and for at most 10 minutes, and re-checks the off switch, the approved
+project and the approved person when used. A link is a "bearer" link: whoever
+holds it in those minutes can download that one file once, so it's handed only
+to Claude's own workspace, and every download is in the audit log.
 """
 
 from __future__ import annotations
@@ -37,8 +39,8 @@ from gateway.guard import public_url
 from gateway.tools import Gateway, current_person, read_tool
 from gateway.tools.register import RETURN_FIELDS, parse_documents
 
-LINK_TTL_S = 15 * 60
-LINK_MAX_USES = 5
+LINK_TTL_S = 10 * 60
+LINK_MAX_USES = 1
 
 
 def _hash(value: str) -> str:
@@ -82,11 +84,20 @@ class FileLinks:
     async def serve(self, request: Request) -> Response:
         """GET /files/{token}: Claude's workspace (or the person) downloads the file."""
         token = request.path_params.get("token", "")
-        rows = self._run("SELECT person, project, document, file_name, expires, uses FROM file_links "
-                         "WHERE hash = ?", (_hash(token),))
-        if not rows or rows[0][4] < time.time() or rows[0][5] >= LINK_MAX_USES:
-            return PlainTextResponse("This download link has expired. Ask Claude for a new one.", 410)
-        person, project, document, file_name, _, _ = rows[0]
+        if request.method == "HEAD":  # a link checker: answer without using up the link
+            return Response(status_code=200, headers={"Cache-Control": "no-store"})
+        # Claim the link in one step, so two downloads at the same moment can't
+        # both get through.
+        with self._lock, self._db:
+            claimed = self._db.execute(
+                "UPDATE file_links SET uses = uses + 1 WHERE hash = ? AND uses < ? AND expires >= ?",
+                (_hash(token), LINK_MAX_USES, time.time())).rowcount
+            rows = self._db.execute("SELECT person, project, document, file_name FROM file_links "
+                                    "WHERE hash = ?", (_hash(token),)).fetchall()
+        if not claimed or not rows:
+            return PlainTextResponse("This download link has been used or has expired. "
+                                     "Ask Claude for a new one.", 410)
+        person, project, document, file_name = rows[0]
 
         def audit(outcome: str, detail: str = "") -> None:
             self.gw.audit.record(person=person, tool="file downloaded", project=project,
@@ -98,7 +109,6 @@ class FileLinks:
                 "@" in person and not policy.person_allowed(person)):
             audit("blocked", "switched off, project or person no longer approved")
             return PlainTextResponse("This download isn't allowed any more.", 403)
-        self._run("UPDATE file_links SET uses = uses + 1 WHERE hash = ?", (_hash(token),))
         try:
             path = document if document.startswith("/") else document_path(project, document)
             content, name = await self.gw.aconex.get_file(
@@ -143,7 +153,7 @@ def register(server: MCPServer, gw: Gateway) -> FileLinks:
                "file_name) when the person asks for a document, a drawing or 'the PDF', or when you "
                "need to read a drawing properly. Give document_number (e.g. EL-CSH12) for the "
                "current revision, plus revision for an older one; or a document_id from a search. "
-               "Returns a download link valid for 15 minutes (5 downloads). Then: download the link "
+               "Returns a download link that works once, within 10 minutes. Then: download the link "
                "into your workspace (e.g. curl -L -o \"<file_name>\" \"<download_url>\") and give the "
                "person the file in the chat; to read it, open the downloaded file and look at it at "
                "high resolution, since drawing notes are often drawn as lines rather than stored as "

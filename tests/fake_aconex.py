@@ -5,6 +5,7 @@ checked) and records every request the gateway makes."""
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 
@@ -240,6 +241,13 @@ class FakeAconex:
             body = request.content.decode("utf-8", "replace")
         self.calls.append({"method": request.method, "path": path,
                            "params": dict(request.url.params), "json": body})
+        # Stands in for the real Aconex: if anything ever reached it that could
+        # send mail or change data, every test using it fails loudly.
+        if request.method != "GET" and not (
+                path.endswith("/register/search")
+                or (re.search(r"/mail(/[^/]+/reply)?$", path)
+                    and list(request.url.params.multi_items()) == [("is_draft", "true")])):
+            raise AssertionError(f"A write reached Aconex: {request.method} {request.url}")
         if self.reject_next_token:
             self.reject_next_token = False
             return httpx.Response(401, text="token expired")

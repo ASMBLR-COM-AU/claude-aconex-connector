@@ -8,8 +8,10 @@ the tool runs. A tool can't opt out.
 from __future__ import annotations
 
 import functools
+import os
 import time
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -18,7 +20,10 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from gateway.aconex import AconexClient, AconexError
+from gateway.aconex.client import Refused
 from gateway.guard import UNKNOWN_PERSON, AuditLog, Policy
+
+DEFAULT_PER_MINUTE = 30
 
 # Tells Claude (and the person approving tool use) that a tool only reads.
 READ_ONLY = ToolAnnotations(
@@ -33,11 +38,36 @@ WRITES_DRAFT = ToolAnnotations(
 SWITCHED_OFF = "The Aconex gateway has been switched off by IT. Nothing was looked up."
 
 
+class PersonLimit:
+    """At most `per_minute` tool calls per person in any 60 seconds. Aconex's
+    speed limit is shared by the whole company (and every other system it
+    connects to Aconex), so one person, or a runaway chat, can't use it all up."""
+
+    def __init__(self, per_minute: int):
+        self.per_minute = per_minute
+        self._calls: dict[str, deque] = {}
+
+    @classmethod
+    def from_env(cls) -> "PersonLimit":
+        return cls(int(os.environ.get("PERSON_CALLS_PER_MINUTE", "") or DEFAULT_PER_MINUTE))
+
+    def allow(self, person: str) -> bool:
+        now = time.monotonic()
+        calls = self._calls.setdefault(person, deque())
+        while calls and calls[0] <= now - 60:
+            calls.popleft()
+        if len(calls) >= self.per_minute:
+            return False
+        calls.append(now)
+        return True
+
+
 @dataclass
 class Gateway:
     aconex: AconexClient
     policy: Policy
     audit: AuditLog
+    limiter: PersonLimit = field(default_factory=PersonLimit.from_env)
 
 
 def current_person() -> str:
@@ -74,8 +104,15 @@ def read_tool(server: MCPServer, gw: Gateway, description: str,
             if project and not gw.policy.project_allowed(project):
                 audit("blocked", "project not approved")
                 raise ToolError(not_approved(project))
+            if not gw.limiter.allow(person):
+                audit("blocked", "over the per-person limit")
+                raise ToolError(f"That's more than {gw.limiter.per_minute} Aconex requests in a "
+                                "minute from one person. Wait a minute, then try again.")
             try:
                 result = await fn(**kwargs)
+            except Refused as err:
+                audit("blocked", f"refused at the outgoing check: {err}")
+                raise ToolError(str(err)) from None
             except ToolError as err:
                 audit("error", str(err))
                 raise

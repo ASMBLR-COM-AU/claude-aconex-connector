@@ -92,6 +92,11 @@ Workspace.
    `https://login.microsoftonline.com/<tenant ID>/v2.0` (the tenant ID is on
    the app's overview page), and set the two secrets as for Google.
 
+It must be the company's **own tenant ID**. The gateway refuses Microsoft's
+shared addresses (`/common`, `/organizations`, `/consumers`): with those,
+someone in any other Microsoft tenant could sign in with an email address they
+typed in themselves.
+
 ## Add the gateway to Claude
 
 An Owner of the Claude Team or Enterprise organisation:
@@ -115,6 +120,22 @@ download link to click. Claude Code and Cowork need neither.
 Claude's settings screens change from time to time; if the wording differs,
 follow Claude's current help for "custom connectors".
 
+### Recommended Claude settings (security)
+
+The gateway controls what Claude can do *in Aconex*. These Claude settings
+control what Claude can do with what it reads:
+
+- **Allowed domains:** add only `aconex-gateway.fly.dev` (plus any the company
+  already needs). Never "all domains". Otherwise a booby-trapped email could
+  tell Claude to post project information to an outside website.
+- **`save_draft` needs approval:** in the connector's tool settings, set
+  `save_draft` to ask every time (if Claude offers per-tool settings on your
+  plan; to be checked on screen). Then a person must click to allow each
+  draft, rather than relying on Claude following instructions.
+- **Other connectors in the same chat** (e.g. email that can send): be aware
+  that Claude could be asked to copy Aconex content into them. Keep sending
+  tools on "needs approval".
+
 ## Changing a secret in the Fly dashboard
 
 The dashboard can save a secret as **Staged** without applying it. If the
@@ -125,6 +146,13 @@ The Aconex keys can be either `ACONEX_CLIENT_ID` + `ACONEX_CLIENT_SECRET`, or
 the Aconex skill's single combined value in `ACONEX_CREDENTIALS_B64`. When the
 gateway starts, the log line "Aconex keys (shape only)" shows what it found
 (lengths, never the values).
+
+## Per-person limit
+
+Each person can make at most 30 gateway requests a minute (`PERSON_CALLS_PER_MINUTE`).
+Over that, Claude is told to wait a minute, and the audit log shows "over the
+per-person limit". It stops one person, or a runaway chat, from using up the
+company's shared Aconex limit.
 
 ## Request pacing
 

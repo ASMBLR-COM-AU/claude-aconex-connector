@@ -96,12 +96,20 @@ def test_choosing_another_file_of_the_document():
     assert fake.calls[-1]["params"] == {"fileName": "S-1100.dwg"}
 
 
-def test_link_works_five_times_then_stops():
+def test_link_works_once_then_stops():
     fake = FakeAconex()
     path = link_path(fake)
     with app(fake) as http:
-        codes = [http.get(path).status_code for _ in range(6)]
-    assert codes == [200] * 5 + [410]
+        codes = [http.get(path).status_code for _ in range(3)]
+    assert codes == [200, 410, 410]
+
+
+def test_link_checker_doesnt_use_up_the_link():
+    fake = FakeAconex()
+    path = link_path(fake)
+    with app(fake) as http:
+        assert http.head(path).status_code == 200
+        assert http.get(path).status_code == 200
 
 
 def test_made_up_link_is_refused():
@@ -111,8 +119,8 @@ def test_made_up_link_is_refused():
 
 def test_link_rechecks_the_off_switch_and_project_when_used():
     fake = FakeAconex()
-    path = link_path(fake)
     for later in (Policy(allowed_projects=frozenset({"1001"}), switched_off=True), Policy()):
+        path = link_path(fake)
         audit = AuditLog(":memory:")
         with app(fake, later, audit) as http:
             assert http.get(path).status_code == 403

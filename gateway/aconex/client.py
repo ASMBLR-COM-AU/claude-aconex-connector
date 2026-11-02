@@ -5,6 +5,10 @@ allowlist (Aconex runs some searches as POST), and it has exactly one write:
 `save_draft`, which always asks Aconex for an unsent draft (`is_draft=true`
 is fixed in the code). There is no way to send mail or change anything else.
 
+Belt and braces: `check_outgoing` runs inside the HTTP client on every request
+just before it leaves, and refuses anything that isn't a read, an allowlisted
+search or an `is_draft=true` draft. A bug elsewhere can't get past it.
+
 Everything about login and the live API's quirks is carried over from the
 Aconex skill's script, which was checked against the live API in Oct 2026.
 """
@@ -44,7 +48,49 @@ SEARCH_ONLY_POSTS = (
     re.compile(r"^/projects/[^/]+/register/search$"),
 )
 
+# The only Aconex write: saving an UNSENT draft (a new mail or a reply).
+DRAFT_POSTS = (
+    re.compile(r"^/projects/[A-Za-z0-9_\-]{1,64}/mail$"),
+    re.compile(r"^/projects/[A-Za-z0-9_\-]{1,64}/mail/[A-Za-z0-9_\-]{1,64}/reply$"),
+)
+
 _SEGMENT = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
+
+
+class Refused(Exception):
+    """A request the gateway will never send. Deliberately not an AconexError,
+    so nothing catches it by accident and carries on."""
+
+
+def check_outgoing(request: httpx.Request, settings: "Settings") -> None:
+    """The last check before ANY request leaves for Aconex, run by the HTTP
+    client itself, so it covers every code path (including future ones).
+
+    Allowed, and nothing else:
+      - the login request to Aconex's sign-in server;
+      - GET (reading);
+      - POST to a search endpoint on the allowlist;
+      - POST that saves a draft, and only with exactly `is_draft=true`.
+    So no code in the gateway can send mail, even by mistake."""
+    url = request.url
+    method = request.method.upper()
+    token_url = httpx.URL(settings.token_url)
+    if method == "POST" and (url.scheme, url.host, url.path) == (token_url.scheme, token_url.host, token_url.path):
+        return
+    api = httpx.URL(settings.api_url)
+    base = api.path.rstrip("/")
+    if (url.scheme, url.host) != (api.scheme, api.host) or not url.path.startswith(base + "/"):
+        raise Refused(f"The gateway only talks to Aconex. Refused {method} {url.host}.")
+    path = url.path[len(base):]
+    if method == "GET":
+        return
+    if method == "POST" and any(p.match(path) for p in SEARCH_ONLY_POSTS) and not url.query:
+        return
+    if (method == "POST" and any(p.match(path) for p in DRAFT_POSTS)
+            and list(url.params.multi_items()) == [("is_draft", "true")]):
+        return
+    raise Refused(f"The gateway never sends {method} {path} to Aconex (only reads, searches "
+                  "and unsent drafts are allowed).")
 
 
 class AconexError(Exception):
@@ -172,7 +218,11 @@ def _problem(response: httpx.Response, path: str) -> str:
 class AconexClient:
     def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
         self.settings = settings
-        self._http = httpx.AsyncClient(transport=transport, timeout=TIMEOUT_S)
+        async def guard(request: httpx.Request) -> None:
+            check_outgoing(request, settings)
+
+        self._http = httpx.AsyncClient(transport=transport, timeout=TIMEOUT_S,
+                                       event_hooks={"request": [guard]}, follow_redirects=False)
         self._token: str | None = None
         self._token_expires = 0.0
         self._pacer = Pacer(settings.per_second, settings.at_once)

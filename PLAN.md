@@ -38,6 +38,8 @@ Staff member ──(work login)──▶ Claude (Team or Enterprise)
 | Claude plans | Must work on both Team and Enterprise | Both let an owner add a custom connector that members sign into |
 | Language | Python, reusing the logic from the existing Aconex skill | Already proven against the live Aconex API |
 | Video | One video covering every stage | |
+| Other companies (product) | Each company gets its own copy of the gateway in **its own Fly account** (decided 2 Nov 2026) | They own their Aconex key and nobody else ever sees it; a bug can't mix one company's data with another's |
+| Security | Promises, proofs and honest limits in [docs/security.md](docs/security.md); independent attack reviews follow [docs/attack-brief.md](docs/attack-brief.md) | So the claims can be checked, not just believed |
 
 ## Still to decide
 
@@ -61,7 +63,7 @@ Aconex administrator. Feature names below match [docs/features.md](docs/features
 | **3. Logging, limits, off switch** ✅ | Audit log, request queue (5 a second), approved project list, kill switch | Every request appears in the log. A burst of requests is queued, not refused. Flipping the switch stops everything |
 | **4. Sign-in** ✅ (Team; Enterprise still to try) | Staff sign in through Claude's connector. Only approved people get in | Works on a Team account and an Enterprise account. A non-approved person is refused |
 | **5. Real key** ✅ (testing key, test project) | Service account key goes into Fly secrets, pointed at a **test** Aconex project | Claude finds a real drawing. The key appears nowhere but Fly secrets |
-| **6. Files** ✅ (register documents; mail attachments in 7, package and workflow files in 9) | Downloads: documents (choosing PDF or DWG), mail attachments and their markups, package attachments, workflow files. Includes deciding how a file reaches Claude through the connector | Claude reads a real drawing's contents. A file can only be fetched by the person who asked for it |
+| **6. Files** ✅ (register documents; mail attachments in 7, package and workflow files in 9) | Downloads: documents (choosing PDF or DWG), mail attachments and their markups, package attachments, workflow files. Includes deciding how a file reaches Claude through the connector | Claude reads a real drawing's contents. A download link works once, for 10 minutes, and is logged under the person who asked |
 | **7. Mail** ✅ | Mail search across the whole project (inbox, sent or everything; filters for sender, sender's company, recipient, type, words), open a mail, its thread, attachments as real files, types, saved searches, what's new | Claude traces the history of an issue across the project's mail on the test project |
 | **8. Drafts** ✅ | Save and update drafts (preview, approve, save) with the person's signature | Person opens the draft and sends it. Aconex shows it came from them |
 | **9. Reviews and packages** ⏸ parked: no workflows, reviews or packages on the only project | Workflows, workflow files, deliverable reviews, review issues, package reviews, packages | Claude answers "what's overdue for review on this job?" correctly against the test project |
@@ -75,7 +77,14 @@ document markups.
 **Rule:** the real Aconex key doesn't go onto Fly until sign-in (stage 4) is
 working. Before that, the gateway only talks to a fake Aconex.
 
-**Not being done (Lachie's decision, 2 Nov 2026).** These were planned before
+**Security pass (0.9.0, 2 Nov 2026):** a hard "no send" check on every request
+leaving for Aconex, single-use download links, a per-person limit, signed
+sign-in checks (plus Google Workspace-only and own-Microsoft-tenant-only),
+honest wording for draft preview codes, a library vulnerability check in CI,
+and 32 attack tests. See [docs/security.md](docs/security.md).
+
+**Not being done yet (Lachie's decision, 2 Nov 2026; to revisit before any
+other company uses the gateway).** These were planned before
 other people use the gateway; they're kept here for the record:
 
 1. Remove the Fly tokens from the Claude build environment, so the session

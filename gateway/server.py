@@ -20,7 +20,7 @@ from gateway.guard import AuditLog, Policy, public_url
 from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
 from gateway.tools import Gateway, drafts, files, mail, people, register
 
-VERSION = "0.8.2"
+VERSION = "0.9.0"
 
 INSTRUCTIONS = (
     "Gateway to Oracle Aconex for this company. Every tool only reads, except "

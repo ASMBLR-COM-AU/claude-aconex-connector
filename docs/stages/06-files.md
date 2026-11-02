@@ -53,9 +53,13 @@ has to look at the real PDF at high resolution, in its own workspace.
 - Takes a **document number** (current revision, or a named `revision`) or a
   document ID from a search, and optionally a `file_name` for one file of a
   multi-file document (e.g. the DWG).
-- Returns a **download link**: random, stored scrambled, tied to the file and
-  the person, 15 minutes, at most 5 downloads, re-checked against the off
-  switch and approvals when used, every download logged.
+- Returns a **download link**: random, stored scrambled, tied to one file,
+  works **once** within **10 minutes** (was 15 minutes and 5 downloads until
+  the security pass on 2 Nov 2026), re-checked against the off switch and
+  approvals when used, every download logged under the person who asked.
+- Honest limit: it's a "bearer" link. Whoever holds it in those minutes can
+  download that one file once; it isn't tied to a login, because Claude's
+  workspace has no way to sign in. It's only handed to Claude's own workspace.
 - Its description tells Claude to download it into its workspace and **give
   the person the file in the chat**, and to open it at high resolution to read
   it. If the workspace can't reach the gateway, Claude gives the person the link.

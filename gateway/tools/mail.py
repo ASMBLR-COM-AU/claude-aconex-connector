@@ -304,7 +304,7 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
                "and register documents (some come from another company's register and have no "
                "document_id). Use the attachment_id from read_mail. marked_up=true gives the "
                "version with markups, as a PDF. Returns a "
-               "download link valid for 15 minutes: download it into your workspace and give the "
+               "download link that works once, within 10 minutes: download it into your workspace and give the "
                "person the file in the chat; if you can't reach it, give them the link.")
     async def get_mail_attachment(project_id: str, attachment_id: str, mail_number: str = "",
                                   mail_id: str = "", marked_up: bool = False) -> dict:

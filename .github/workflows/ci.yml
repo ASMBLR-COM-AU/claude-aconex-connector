@@ -14,6 +14,8 @@ jobs:
           python-version: "3.13"
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+      # Fails if any library the gateway uses has a publicly known security hole.
+      - run: pip install pip-audit==2.9.0 && pip-audit -r requirements.txt --strict
 
   # Deploys only from main, and only after the tests pass.
   deploy:

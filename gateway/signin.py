@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from urllib.parse import urlencode, urlsplit
 
 import httpx
+import jwt
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -99,16 +100,32 @@ class IdentitySettings:
         )
 
 
-def _id_token_claims(id_token: str) -> dict:
-    """The claims inside an ID token. Its signature isn't checked: the token
-    came straight from the identity provider's token endpoint over HTTPS, in
-    exchange for the gateway's client secret, which OpenID Connect Core
-    (section 3.1.3.7) accepts in place of a signature check. Issuer, audience,
-    expiry and nonce are still checked by the caller."""
+MICROSOFT_SHARED = ("/common", "/organizations", "/consumers")
+GMAIL_DOMAINS = ("gmail.com", "googlemail.com")
+
+
+def verified_claims(id_token: str, keys: dict, issuers: set, client_id: str) -> dict:
+    """The claims inside an ID token, after checking its digital signature
+    against the identity provider's published keys, plus its issuer, audience
+    and expiry. Raises SignInError if anything doesn't check out."""
     try:
-        payload = id_token.split(".")[1]
-        return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-    except (IndexError, ValueError):
+        kid = jwt.get_unverified_header(id_token).get("kid", "")
+    except jwt.PyJWTError:
+        raise SignInError("The sign-in service sent back an unreadable identity.") from None
+    key = keys.get(kid)
+    if key is None:
+        raise SignInError("The identity wasn't signed by the company sign-in service.")
+    try:
+        return jwt.decode(id_token, key=key, algorithms=["RS256"], audience=client_id,
+                          issuer=sorted(issuers), leeway=60,
+                          options={"require": ["exp", "iat", "iss", "aud"]})
+    except jwt.InvalidSignatureError:
+        raise SignInError("The identity wasn't signed by the company sign-in service.") from None
+    except (jwt.InvalidIssuerError, jwt.InvalidAudienceError):
+        raise SignInError("The identity came from the wrong sign-in service.") from None
+    except jwt.ExpiredSignatureError:
+        raise SignInError("The sign-in expired or didn't match. Please try again.") from None
+    except jwt.PyJWTError:
         raise SignInError("The sign-in service sent back an unreadable identity.") from None
 
 
@@ -119,6 +136,30 @@ class IdentityProvider:
         self.callback_url = callback_url
         self._http = httpx.AsyncClient(transport=transport, timeout=15)
         self._endpoints: dict | None = None
+        self._keys: dict = {}
+
+    def _check_issuer(self) -> None:
+        """Microsoft's shared sign-in addresses let ANY Microsoft tenant sign
+        in, and in another tenant anyone can set any email address (the
+        "nOAuth" problem). Only a company's own tenant address is accepted."""
+        issuer = self.settings.issuer.lower()
+        if "microsoftonline.com" in issuer and any(part in issuer for part in MICROSOFT_SHARED):
+            raise SignInError("Microsoft sign-in must use the company's own tenant address "
+                              "(https://login.microsoftonline.com/<tenant ID>/v2.0), not a shared one.")
+
+    async def _signing_keys(self, kid: str) -> dict:
+        """The identity provider's published signing keys, refreshed when a
+        token names a key we haven't seen (they rotate them)."""
+        if kid not in self._keys:
+            endpoints = await self._discover()
+            try:
+                response = await self._http.get(endpoints["jwks_uri"])
+                response.raise_for_status()
+                keys = jwt.PyJWKSet.from_dict(response.json()).keys
+            except (httpx.HTTPError, ValueError, KeyError, jwt.PyJWTError):
+                raise SignInError("Couldn't check the sign-in with the company sign-in service.") from None
+            self._keys = {k.key_id: k for k in keys if k.key_id}
+        return self._keys
 
     async def _discover(self) -> dict:
         if self._endpoints is None:
@@ -134,6 +175,7 @@ class IdentityProvider:
     async def login_url(self, state: str, nonce: str, verifier: str) -> str:
         if not self.settings.configured:
             raise SignInError("Sign-in isn't set up on the gateway yet.")
+        self._check_issuer()
         endpoints = await self._discover()
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         return endpoints["authorization_endpoint"] + "?" + urlencode({
@@ -150,6 +192,7 @@ class IdentityProvider:
 
     async def email_for(self, code: str, verifier: str, nonce: str) -> str:
         """Swap the code Google/Microsoft sent back for the person's verified email."""
+        self._check_issuer()
         endpoints = await self._discover()
         try:
             response = await self._http.post(endpoints["token_endpoint"], data={
@@ -164,23 +207,30 @@ class IdentityProvider:
             raise SignInError("Couldn't reach the company sign-in service.") from None
         if response.status_code != 200:
             raise SignInError("The company sign-in service didn't accept the login. Please try again.")
-        claims = _id_token_claims(response.json().get("id_token", ""))
+        try:
+            id_token = str(response.json().get("id_token", ""))
+            kid = jwt.get_unverified_header(id_token).get("kid", "")
+        except (ValueError, AttributeError, jwt.PyJWTError):
+            raise SignInError("The sign-in service sent back an unreadable identity.") from None
 
-        issuers = {self.settings.issuer}
-        if self.settings.issuer == GOOGLE:
-            issuers.add("accounts.google.com")  # Google uses both forms
-        audience = claims.get("aud")
-        audiences = audience if isinstance(audience, list) else [audience]
-        if claims.get("iss") not in issuers or self.settings.client_id not in audiences:
-            raise SignInError("The identity came from the wrong sign-in service.")
-        if float(claims.get("exp", 0)) < time.time() or claims.get("nonce") != nonce:
+        google = self.settings.issuer == GOOGLE
+        issuers = {self.settings.issuer} | ({"accounts.google.com"} if google else set())
+        claims = verified_claims(id_token, await self._signing_keys(kid), issuers,
+                                 self.settings.client_id)
+        if claims.get("nonce") != nonce:
             raise SignInError("The sign-in expired or didn't match. Please try again.")
-        if claims.get("email_verified") is False:
+        if claims.get("email_verified") is False or (google and claims.get("email_verified") is not True):
             raise SignInError("That account's email address isn't verified.")
         # Google sends `email`; Microsoft often sends `preferred_username` instead.
         email = (claims.get("email") or claims.get("preferred_username") or "").strip().lower()
         if "@" not in email:
             raise SignInError("The sign-in service didn't say which email address you used.")
+        domain = email.rsplit("@", 1)[1]
+        if google and domain not in GMAIL_DOMAINS and claims.get("hd") != domain:
+            # A personal Google account can be registered with a work email
+            # address; only the company's own Google Workspace account counts.
+            raise SignInError(f"That Google account isn't managed by {domain}'s Google Workspace. "
+                              "Sign in with your work Google account.")
         return email
 
 

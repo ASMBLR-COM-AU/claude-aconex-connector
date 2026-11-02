@@ -19,7 +19,7 @@ first and only write.
   `save_draft`, with `is_draft=true` fixed. There is no send, forward, delete
   or other write anywhere (a test checks the connection's methods).
 - **Preview, then approve, then save.** `prepare_draft` saves nothing and
-  returns a preview plus a one-time approval code. `save_draft` takes only the
+  returns a preview plus a one-time preview code. `save_draft` takes only the
   code, so what is saved is exactly what was previewed. A change means a new
   preview.
 - **Codes:** random, stored as a hash, work once, for the person who
@@ -35,7 +35,7 @@ first and only write.
 
 | Tool | What it does |
 |---|---|
-| `prepare_draft` | New mail or reply (to the sender, or everyone with `reply_all`), to/cc/bcc by name, mail type, reason, register documents, or update an existing draft. Preview + approval code |
+| `prepare_draft` | New mail or reply (to the sender, or everyone with `reply_all`), to/cc/bcc by name, mail type, reason, register documents, or update an existing draft. Preview + preview code |
 | `save_draft` | Saves the approved draft, unsent, and gives its DRAFT number |
 
 ## Done when
