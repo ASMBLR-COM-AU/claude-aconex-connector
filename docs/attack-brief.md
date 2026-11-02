@@ -1,6 +1,6 @@
 # Attack brief: independent security review
 
-You are reviewing the Aconex Gateway as a hostile, skilled attacker would.
+You are reviewing the Aconex Connector (its server is called "the gateway" in the code) as a hostile, skilled attacker would.
 Your job is to find ways to break its promises, not to confirm they hold.
 Assume the author missed things. `docs/security.md` lists the promises;
 `PLAN.md` and `docs/stages/` explain the design.

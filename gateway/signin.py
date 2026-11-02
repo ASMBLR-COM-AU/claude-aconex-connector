@@ -441,8 +441,8 @@ def _page(message: str, status: int) -> HTMLResponse:
 
     return HTMLResponse(
         "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
-        "<title>Aconex Gateway</title>"
+        "<title>Aconex Connector</title>"
         "<body style='font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem'>"
-        f"<h1 style='font-size:1.3rem'>Aconex Gateway</h1><p>{escape(message, quote=False)}</p></body>",
+        f"<h1 style='font-size:1.3rem'>Aconex Connector</h1><p>{escape(message, quote=False)}</p></body>",
         status_code=status,
     )

@@ -1,4 +1,4 @@
-"""Set up the Aconex Gateway for a new company, in that company's own Fly account.
+"""Set up the Aconex Connector for a new company, in that company's own Fly account.
 
     python3 scripts/new_company.py
 
@@ -131,7 +131,7 @@ def main() -> int:
     parser.add_argument("--out", help="folder to write (default deploy-<company>)")
     args = parser.parse_args()
 
-    print("Aconex Gateway: new company setup. Nothing is created yet; this writes a folder.\n")
+    print("Aconex Connector: new company setup. Nothing is created yet; this writes a folder.\n")
     while True:
         try:
             company = ask("Company short name (e.g. smith-builders)")

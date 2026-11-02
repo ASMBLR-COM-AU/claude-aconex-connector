@@ -1,4 +1,4 @@
-"""The Aconex Gateway: an MCP server that Claude connects to as a custom connector.
+"""The Aconex Connector's server (called "the gateway" in the code): an MCP server that Claude connects to as a custom connector.
 
 Stage 7: read-only tools for projects, people, the document register and its
 files, and project mail,
@@ -23,7 +23,7 @@ from gateway.tools import Gateway, drafts, files, mail, people, register
 VERSION = "0.9.1"
 
 INSTRUCTIONS = (
-    "Gateway to Oracle Aconex for this company. Every tool only reads, except "
+    "Connector to Oracle Aconex for this company. Every tool only reads, except "
     "save_draft, which saves an unsent mail draft after the person approves a "
     "preview from prepare_draft; nothing can be sent. "
     "Find a project's ID with list_projects first. Search narrowly, then widen. "
@@ -68,12 +68,12 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
             client_registration_options=ClientRegistrationOptions(enabled=True),
             revocation_options=RevocationOptions(enabled=True),
         )
-    server = MCPServer(name="aconex-gateway", version=VERSION, instructions=INSTRUCTIONS,
+    server = MCPServer(name="aconex-connector", version=VERSION, instructions=INSTRUCTIONS,
                        auth_server_provider=signin, auth=auth)
 
     @server.tool(description="Check the gateway is reachable. Returns a short message.")
     def ping() -> str:
-        return f"Aconex Gateway {VERSION} is running."
+        return f"Aconex Connector {VERSION} is running."
 
     people.register(server, gw)
     register.register(server, gw)

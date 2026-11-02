@@ -68,9 +68,9 @@ One-off, about 5 minutes, free. Use an admin account on the company's Google
 Workspace.
 
 1. Open https://console.cloud.google.com and create a project called
-   "Aconex Gateway".
+   "Aconex Connector".
 2. Go to **Google Auth Platform** (older screens call it **APIs & Services ›
-   OAuth consent screen**). Set the app name to "Aconex Gateway", pick a support
+   OAuth consent screen**). Set the app name to "Aconex Connector", pick a support
    email, and choose audience **Internal**, so only the company's own accounts
    can sign in.
 3. Go to **Clients › Create client**. Type: **Web application**. Name: "Aconex
@@ -87,7 +87,7 @@ Workspace.
 ## Set up sign-in with Microsoft Entra ID (not yet tested)
 
 1. In the Entra admin centre: **App registrations › New registration**. Name
-   "Aconex Gateway", accounts in this organisational directory only. Redirect
+   "Aconex Connector", accounts in this organisational directory only. Redirect
    URI (Web): `https://aconex-gateway.fly.dev/auth/callback`.
 2. **Certificates & secrets › New client secret.** Copy the value.
 3. Set `SIGNIN_ISSUER` in `fly.toml` to

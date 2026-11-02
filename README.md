@@ -1,8 +1,29 @@
-# Claude Aconex Gateway
+# Aconex Connector for Claude
 
-A small app that lets Claude work in Oracle Aconex safely. It holds the Aconex
-keys, gives Claude a fixed menu of actions, and checks every request. Claude
-never sees the keys.
+A Claude connector that lets a company's staff work in Oracle Aconex safely.
+Its server (called **the gateway** in the code) holds the company's Aconex key,
+gives Claude a fixed menu of actions, and checks every request. Claude never
+sees the key.
+
+## Skill or connector?
+
+ASMBLR makes two separate products that let Claude work in Oracle Aconex.
+They don't share code, and neither needs the other.
+
+| | **Aconex skill** | **Aconex Connector** |
+|---|---|---|
+| What it is | Instructions plus a script that Claude runs on the person's own computer | A small server the company hosts; Claude connects to it like any other connector |
+| Where it lives | [ASMBLR-COM-AU/aconex-skill](https://github.com/ASMBLR-COM-AU/aconex-skill) (open source) | ASMBLR-COM-AU/claude-aconex-connector (private; ask [ASMBLR](https://asmblr.com.au)) |
+| Who holds the Aconex key | Each person, in a file or setting on their computer | Only the company's server (in its own Fly.io account); Claude and staff never see it |
+| Works in | Claude Code, Cowork, and the Claude apps with code execution and Aconex allowed in network settings | Claude on the web, desktop and mobile, Claude Code and Cowork, with no network settings beyond the connector's address |
+| Sign-in | None: whoever has the key file | Each person signs in with their work Google or Microsoft account; only approved people get in |
+| Company controls | The script's built-in limits | Approved people and projects, an audit log with a name on every action, an off switch, per-person limits |
+| Set up by | One person, about 10 minutes | The company's IT, about an hour, once |
+| Best for | One person or a small team trying it out | A company rolling it out to staff |
+| Can it send mail? | No: unsent drafts only | No: unsent drafts only |
+
+In the Connector's code and technical docs, its server is called **the gateway**.
+
 
 - **The plan and every decision:** [PLAN.md](PLAN.md)
 - **What it can and can't do, and the proof:** [docs/security.md](docs/security.md)

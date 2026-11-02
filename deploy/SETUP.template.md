@@ -1,4 +1,4 @@
-# Aconex Gateway setup: {slug}
+# Aconex Connector setup: {slug}
 
 Work through this with the company's IT person. Tick each box as you go.
 It takes about an hour, most of it waiting on admin screens.
@@ -29,8 +29,8 @@ It takes about an hour, most of it waiting on admin screens.
 
 The Aconex administrator:
 
-- [ ] Creates a **plain Aconex user** for the gateway (e.g. "Claude
-      Gateway"). Not an administrator. It sees exactly what this user can see.
+- [ ] Creates a **plain Aconex user** for the connector (e.g. "Claude
+      Connector"). Not an administrator. It sees exactly what this user can see.
 - [ ] Adds that user to the approved project(s) ({projects}) with a role that
       can **read documents and mail** and **create mail** (for drafts; the
       gateway can never send). Nothing more.
@@ -42,9 +42,9 @@ The Aconex administrator:
 <!-- if google -->
 In Google Cloud, with a Google Workspace admin account:
 
-- [ ] Create a project called "Aconex Gateway".
+- [ ] Create a project called "Aconex Connector".
 - [ ] **Google Auth Platform** (or **APIs & Services › OAuth consent
-      screen**): app name "Aconex Gateway", audience **Internal**.
+      screen**): app name "Aconex Connector", audience **Internal**.
 - [ ] **Clients › Create client**: type **Web application**, name "Aconex
       Gateway", **Authorised redirect URI** exactly:
       `{public_url}/auth/callback`
@@ -52,7 +52,7 @@ In Google Cloud, with a Google Workspace admin account:
 <!-- end --><!-- if microsoft -->
 In the Microsoft Entra admin centre:
 
-- [ ] **App registrations › New registration**: name "Aconex Gateway",
+- [ ] **App registrations › New registration**: name "Aconex Connector",
       accounts in **this organisational directory only**, redirect URI (Web)
       exactly: `{public_url}/auth/callback`
 - [ ] **Certificates & secrets › New client secret.** Keep the **application
