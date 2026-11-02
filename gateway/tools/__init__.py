@@ -1,33 +1,77 @@
-"""Shared plumbing for the gateway's menu of tools."""
+"""Shared plumbing for the gateway's menu of tools.
+
+Every Aconex tool is registered through `read_tool`, which applies the
+stage 3 controls (off switch, approved projects, audit log) before and after
+the tool runs. A tool can't opt out.
+"""
 
 from __future__ import annotations
 
 import functools
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from gateway.aconex import AconexError
+from gateway.aconex import AconexClient, AconexError
+from gateway.guard import UNKNOWN_PERSON, AuditLog, Policy
 
 # Tells Claude (and the person approving tool use) that a tool only reads.
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=True
 )
 
+SWITCHED_OFF = "The Aconex gateway has been switched off by IT. Nothing was looked up."
 
-def read_tool(server: MCPServer, description: str):
-    """Register a read-only tool. Aconex problems come back to Claude as a
-    plain message rather than a crash."""
+
+@dataclass
+class Gateway:
+    aconex: AconexClient
+    policy: Policy
+    audit: AuditLog
+
+
+def not_approved(project_id: str) -> str:
+    return (f"Project {project_id} isn't switched on for the gateway. Ask IT to approve it, "
+            "or use list_projects to see the projects that are.")
+
+
+def read_tool(server: MCPServer, gw: Gateway, description: str):
+    """Register a read-only tool behind the gateway's controls."""
 
     def decorate(fn):
         @functools.wraps(fn)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(**kwargs):
+            project = str(kwargs.get("project_id", "") or "").strip()
+            started = time.monotonic()
+
+            def audit(outcome: str, detail: str = "") -> None:
+                gw.audit.record(person=UNKNOWN_PERSON, tool=fn.__name__, project=project,
+                                arguments=kwargs, outcome=outcome, detail=detail,
+                                ms=int((time.monotonic() - started) * 1000))
+
+            if gw.policy.switched_off:
+                audit("blocked", "gateway switched off")
+                raise ToolError(SWITCHED_OFF)
+            if project and not gw.policy.project_allowed(project):
+                audit("blocked", "project not approved")
+                raise ToolError(not_approved(project))
             try:
-                return await fn(*args, **kwargs)
+                result = await fn(**kwargs)
+            except ToolError as err:
+                audit("error", str(err))
+                raise
             except AconexError as err:
+                audit("error", str(err))
                 raise ToolError(str(err)) from None
+            except Exception as err:
+                audit("crash", f"{type(err).__name__}: {err}")
+                raise
+            audit("ok")
+            return result
 
         server.tool(description=description, annotations=READ_ONLY)(wrapper)
         return fn

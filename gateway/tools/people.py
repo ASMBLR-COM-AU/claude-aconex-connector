@@ -6,14 +6,15 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.utilities.types import Image
 
-from gateway.aconex import AconexClient, seg
+from gateway.aconex import seg
 from gateway.aconex.parse import first, flatten, text
-from gateway.tools import clamp, read_tool
+from gateway.tools import Gateway, clamp, read_tool
 
 
-def register(server: MCPServer, aconex: AconexClient) -> None:
+def register(server: MCPServer, gw: Gateway) -> None:
+    aconex = gw.aconex
 
-    @read_tool(server, "List the Aconex projects the gateway can see, with each project's "
+    @read_tool(server, gw, "List the Aconex projects the gateway is approved for, with each project's "
                        "ID, name and code. Start here to find a project's ID.")
     async def list_projects() -> dict:
         root = await aconex.get_xml("/projects")
@@ -24,11 +25,11 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
                 "code": first(p, "ProjectCode", "ProjectShortName"),
             }
             for p in root.iter("Project")
-            if text(p, "ProjectId")
+            if text(p, "ProjectId") and gw.policy.project_allowed(text(p, "ProjectId"))
         ]
         return {"projects": projects}
 
-    @read_tool(server, "Search the people on one project by name, company or job title. "
+    @read_tool(server, gw, "Search the people on one project by name, company or job title. "
                        "Matches any part of the text. Leave all filters empty to list everyone.")
     async def search_project_directory(project_id: str, name: str = "", company: str = "",
                                        job_title: str = "", limit: int = 50) -> dict:
@@ -53,7 +54,7 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         limit = clamp(limit, 1, 200)
         return {"people": people[:limit], "matched": len(people)}
 
-    @read_tool(server, "One person's contact and company details. Give project_id to look them "
+    @read_tool(server, gw, "One person's contact and company details. Give project_id to look them "
                        "up on that project; leave it empty to use the Aconex-wide directory.")
     async def get_person(user_id: str, project_id: str = "") -> dict:
         uid = seg(user_id, "user ID")
@@ -61,16 +62,16 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
                 else f"/users/{uid}")
         return flatten(await aconex.get_xml(path))
 
-    @read_tool(server, "Which Aconex account the gateway is signed in as.")
+    @read_tool(server, gw, "Which Aconex account the gateway is signed in as.")
     async def gateway_account() -> dict:
         return flatten(await aconex.get_xml("/user"))
 
-    @read_tool(server, "A project's mailing groups, with their members.")
+    @read_tool(server, gw, "A project's mailing groups, with their members.")
     async def list_mailing_groups(project_id: str) -> dict:
         data = await aconex.get_json(f"/mailinggroups/{seg(project_id, 'project ID')}")
         return {"groups": data}
 
-    @read_tool(server, "Search people at any company across Aconex (not just one project). "
+    @read_tool(server, gw, "Search people at any company across Aconex (not just one project). "
                        "Give at least one filter. Names match from the start; company, "
                        "job title and division match any part.")
     async def search_aconex_directory(company: str = "", given_name: str = "",
@@ -88,16 +89,16 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         limit = clamp(limit, 1, 200)
         return {"people": people[:limit], "matched": len(people)}
 
-    @read_tool(server, "A company's details in Aconex, by its organisation ID.")
+    @read_tool(server, gw, "A company's details in Aconex, by its organisation ID.")
     async def get_company(organization_id: str) -> dict:
         return flatten(await aconex.get_xml(f"/organizations/{seg(organization_id, 'organisation ID')}"))
 
-    @read_tool(server, "The custom fields set up on a project (label, type, options, on or off).")
+    @read_tool(server, gw, "The custom fields set up on a project (label, type, options, on or off).")
     async def list_project_fields(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/projectField")
         return {"fields": [flatten(f) for f in root][:200]}
 
-    @read_tool(server, "A project's or a company's logo, as an image. Give exactly one of "
+    @read_tool(server, gw, "A project's or a company's logo, as an image. Give exactly one of "
                        "project_id or organization_id.")
     async def get_logo(project_id: str = "", organization_id: str = "") -> Image:
         if bool(project_id) == bool(organization_id):

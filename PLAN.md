@@ -44,8 +44,6 @@ Staff member ──(work login)──▶ Claude (Team or Enterprise)
 - **Sign-in provider (stage 4).** How staff prove who they are. Likely the
   company's existing Microsoft 365 or Google Workspace login (free to use for
   sign-in), or a small service with a free tier.
-- **Where the audit log is kept (stage 3).** Probably a small file database on
-  Fly (costs cents a month).
 
 ## The stages
 
@@ -61,7 +59,7 @@ Aconex administrator. Feature names below match [docs/features.md](docs/features
 | **0. Aconex checks** (parallel) | Aconex admin creates the service account and API client, with these permissions: search organisation mail, Global Directory, create mail (for drafts). Oracle service request for the activity log, if we keep it | Confirmed: the service account can search company mail **through the API**; a colleague can open its draft, and sending shows **their** name |
 | **1. Skeleton** ✅ | This repo, plus a "hello" gateway deployed on Fly. Nothing secret | The Fly address answers. No keys anywhere |
 | **2. Projects, people and register** ✅ | Read-only tools for projects, directory, companies, mailing groups, custom fields, logos, register search, revisions, details, drawings, content search, event log, transmittals, saved searches, changes since a date, related documents. Tested against a **fake** Aconex. No file downloads yet | Tests pass. Every tool is read-only. No "call any API" option exists |
-| **3. Logging, limits, off switch** | Audit log, request queue (5 a second), approved project list, kill switch | Every request appears in the log. A burst of requests is queued, not refused. Flipping the switch stops everything |
+| **3. Logging, limits, off switch** ✅ | Audit log, request queue (5 a second), approved project list, kill switch | Every request appears in the log. A burst of requests is queued, not refused. Flipping the switch stops everything |
 | **4. Sign-in** | Staff sign in through Claude's connector. Only approved people get in | Works on a Team account and an Enterprise account. A non-approved person is refused |
 | **5. Real key** | Service account key goes into Fly secrets, pointed at a **test** Aconex project | Claude finds a real drawing. The key appears nowhere but Fly secrets |
 | **6. Files** | Downloads: documents (choosing PDF or DWG), mail attachments and their markups, package attachments, workflow files. Includes deciding how a file reaches Claude through the connector | Claude reads a real drawing's contents. A file can only be fetched by the person who asked for it |

@@ -11,10 +11,12 @@ Aconex skill's script, which was checked against the live API in Oct 2026.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import time
 import xml.etree.ElementTree as ET
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import httpx
@@ -27,6 +29,13 @@ ACCEPT_JSON = "application/json"
 
 TIMEOUT_S = 60
 TOKEN_MARGIN_S = 120  # renew the token this long before Aconex says it expires
+
+# Aconex allows 5 requests a second and 10 at once for the WHOLE company, shared
+# with every other system that uses the API. The gateway takes less than that
+# by default so it never crowds them out.
+DEFAULT_PER_SECOND = 3.0
+DEFAULT_AT_ONCE = 4
+THROTTLE_WAITS_S = (5, 15)  # Aconex answers 503 while it's limiting requests
 
 # POST endpoints that only search. Anything else is refused before it leaves
 # the gateway. Patterns match the path after the API base URL.
@@ -61,6 +70,9 @@ class Settings:
     client_secret: str = ""
     api_url: str = DEFAULT_API_URL
     token_url: str = DEFAULT_TOKEN_URL
+    per_second: float = DEFAULT_PER_SECOND
+    at_once: int = DEFAULT_AT_ONCE
+    throttle_waits: tuple = THROTTLE_WAITS_S
 
     @property
     def connected(self) -> bool:
@@ -73,7 +85,32 @@ class Settings:
             client_secret=os.environ.get("ACONEX_CLIENT_SECRET", "").strip(),
             api_url=os.environ.get("ACONEX_API_URL", "").strip() or DEFAULT_API_URL,
             token_url=os.environ.get("ACONEX_TOKEN_URL", "").strip() or DEFAULT_TOKEN_URL,
+            per_second=float(os.environ.get("ACONEX_PER_SECOND", "") or DEFAULT_PER_SECOND),
+            at_once=int(os.environ.get("ACONEX_AT_ONCE", "") or DEFAULT_AT_ONCE),
         )
+
+
+class Pacer:
+    """Queues requests so no more than `per_second` start each second and no
+    more than `at_once` are in flight. Extra requests wait their turn rather
+    than being refused."""
+
+    def __init__(self, per_second: float, at_once: int):
+        self._gap = 1.0 / per_second
+        self._next = 0.0
+        self._lock = asyncio.Lock()
+        self._slots = asyncio.Semaphore(at_once)
+
+    @asynccontextmanager
+    async def turn(self):
+        async with self._slots:
+            async with self._lock:
+                now = time.monotonic()
+                start = max(now, self._next)
+                self._next = start + self._gap
+            if start > now:
+                await asyncio.sleep(start - now)
+            yield
 
 
 def _problem(response: httpx.Response, path: str) -> str:
@@ -94,6 +131,7 @@ class AconexClient:
         self._http = httpx.AsyncClient(transport=transport, timeout=TIMEOUT_S)
         self._token: str | None = None
         self._token_expires = 0.0
+        self._pacer = Pacer(settings.per_second, settings.at_once)
 
     # ── login ───────────────────────────────────────────────────────
 
@@ -126,18 +164,23 @@ class AconexClient:
                     json_body: dict | None = None) -> httpx.Response:
         url = self.settings.api_url + path
         logged_in_again = False
+        waits = list(self.settings.throttle_waits)
         while True:
             if self._token is None or time.monotonic() >= self._token_expires:
                 await self._login()
             try:
-                response = await self._http.request(
-                    method, url, params=params, json=json_body,
-                    headers={"Authorization": f"Bearer {self._token}", "Accept": accept},
-                )
+                async with self._pacer.turn():
+                    response = await self._http.request(
+                        method, url, params=params, json=json_body,
+                        headers={"Authorization": f"Bearer {self._token}", "Accept": accept},
+                    )
             except httpx.HTTPError as err:
                 raise AconexError(f"Couldn't reach Aconex ({err}).") from None
             if response.status_code == 401 and not logged_in_again:
                 logged_in_again, self._token = True, None
+                continue
+            if response.status_code == 503 and waits:
+                await asyncio.sleep(waits.pop(0))
                 continue
             if response.status_code >= 400:
                 raise AconexError(_problem(response, path))

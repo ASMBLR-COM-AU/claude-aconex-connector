@@ -3,6 +3,15 @@ primary_region = "syd"
 
 [env]
   PUBLIC_HOST = "aconex-gateway.fly.dev"
+  AUDIT_DB = "/data/audit.db"
+  # Projects the gateway may use, comma-separated Aconex project IDs. Empty
+  # means none. Changing it goes through GitHub, so a person approves it.
+  ALLOWED_PROJECTS = ""
+
+# Encrypted 1 GB volume for the audit log, with daily snapshots kept 5 days.
+[mounts]
+  source = "gateway_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8080

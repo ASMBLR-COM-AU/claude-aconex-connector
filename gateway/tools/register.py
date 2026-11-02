@@ -9,9 +9,9 @@ from typing import Literal
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from gateway.aconex import AconexClient, AconexError, seg
+from gateway.aconex import AconexError, seg
 from gateway.aconex.parse import first, flatten, lucene_phrase, page_info, schema_values, text
-from gateway.tools import clamp, parse_when, read_tool
+from gateway.tools import Gateway, clamp, parse_when, read_tool
 
 RETURN_FIELDS = "docno,title,revision,statusid,doctype,discipline,revisiondate,filename"
 SORTS = {"number": ("docno", "asc"), "date": ("revisiondate", "desc")}
@@ -53,7 +53,8 @@ def leaf_rows(root, limit: int) -> list:
     return rows
 
 
-def register(server: MCPServer, aconex: AconexClient) -> None:
+def register(server: MCPServer, gw: Gateway) -> None:
+    aconex = gw.aconex
     status_ids: dict[str, dict] = {}
 
     async def status_id(project: str, status: str) -> str:
@@ -68,7 +69,7 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
             raise ToolError(f"No status called {status!r} on this project. Its statuses: {names}.")
         return found
 
-    @read_tool(server,
+    @read_tool(server, gw,
                "Search a project's document register. Free words match the document number or "
                "title. Filters: number, title, discipline, doc_type, status (copy values from a "
                "result row: each project names them differently). Current revisions only unless "
@@ -117,7 +118,7 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         root = await aconex.get_xml(f"/projects/{project}/{where}", params)
         return {"documents": parse_documents(root)[:limit], **page_info(root)}
 
-    @read_tool(server, "Every revision of one document, oldest first, by its document number.")
+    @read_tool(server, gw, "Every revision of one document, oldest first, by its document number.")
     async def revision_history(project_id: str, document_number: str) -> dict:
         project = seg(project_id, "project ID")
         root = await aconex.get_xml(f"/projects/{project}/register", {
@@ -133,14 +134,14 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         rows.sort(key=lambda d: d["date"])
         return {"document_number": document_number, "revisions": rows}
 
-    @read_tool(server, "Every field recorded against one document revision (author, status, "
+    @read_tool(server, gw, "Every field recorded against one document revision (author, status, "
                        "review source, file details...). Use a document_id from a search result.")
     async def document_details(project_id: str, document_id: str) -> dict:
         root = await aconex.get_xml(
             f"/projects/{seg(project_id, 'project ID')}/register/{seg(document_id, 'document ID')}/metadata")
         return flatten(root, limit=150)
 
-    @read_tool(server, "The register's fields on a project and their allowed values "
+    @read_tool(server, gw, "The register's fields on a project and their allowed values "
                        "(disciplines, types, statuses...). Use it to search with exact values.")
     async def register_fields(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/register/schema")
@@ -157,19 +158,19 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
             })
         return {"fields": fields}
 
-    @read_tool(server, "The rule that decides which documents count as the project's current "
+    @read_tool(server, gw, "The rule that decides which documents count as the project's current "
                        "drawing set (for example by type and status).")
     async def current_drawing_set_rule(project_id: str) -> dict:
         return flatten(await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/currentSet"))
 
-    @read_tool(server, "A document's history across all its revisions: registered, viewed, "
+    @read_tool(server, gw, "A document's history across all its revisions: registered, viewed, "
                        "downloaded, sent on a transmittal, and so on.")
     async def document_event_log(project_id: str, document_id: str, limit: int = 50) -> dict:
         root = await aconex.get_xml(
             f"/projects/{seg(project_id, 'project ID')}/register/{seg(document_id, 'document ID')}/eventlog")
         return {"events": leaf_rows(root, clamp(limit, 1, 200))}
 
-    @read_tool(server, "Which transmittals a document went out on, by document number.")
+    @read_tool(server, gw, "Which transmittals a document went out on, by document number.")
     async def document_transmittals(project_id: str, document_number: str) -> dict:
         project = seg(project_id, "project ID")
         me = await aconex.get_xml("/user")
@@ -189,13 +190,13 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         except ValueError:
             raise AconexError("Aconex sent back something unexpected for this search.") from None
 
-    @read_tool(server, "The saved register searches people have set up on a project, with their "
+    @read_tool(server, gw, "The saved register searches people have set up on a project, with their "
                        "filters. Run one by passing its filters to search_register.")
     async def saved_register_searches(project_id: str) -> dict:
         root = await aconex.get_xml(f"/projects/{seg(project_id, 'project ID')}/documents/savedSearch")
         return {"saved_searches": [flatten(s) for s in root][:100]}
 
-    @read_tool(server, "Documents that changed (or had something happen to them) since a date, "
+    @read_tool(server, gw, "Documents that changed (or had something happen to them) since a date, "
                        "to answer questions like 'what's new this week'. Aconex works to the hour.")
     async def documents_changed_since(project_id: str, since: str, limit: int = 200) -> dict:
         moment = parse_when(since, "since")
@@ -204,7 +205,7 @@ def register(server: MCPServer, aconex: AconexClient) -> None:
         })
         return {"since": moment.isoformat(), "changes": leaf_rows(root, clamp(limit, 1, 500))}
 
-    @read_tool(server, "Links between related documents that were added or removed in a date range. "
+    @read_tool(server, gw, "Links between related documents that were added or removed in a date range. "
                        "Aconex has no way to list every document related to one document.")
     async def related_document_changes(project_id: str, since: str, until: str = "") -> dict:
         start = parse_when(since, "since")

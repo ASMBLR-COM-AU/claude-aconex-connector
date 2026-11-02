@@ -3,8 +3,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY gateway ./gateway
-# Run as a normal user, not root.
+# Starts as root only to hand the storage volume to the `gateway` user, then
+# switches to that user before serving anything (see gateway/__main__.py).
 RUN useradd --create-home gateway
-USER gateway
 EXPOSE 8080
 CMD ["python", "-m", "gateway"]

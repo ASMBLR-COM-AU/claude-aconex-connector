@@ -9,9 +9,11 @@ never sees the keys.
 
 ## Current stage
 
-Stage 2: 19 read-only tools for projects, people and the document register,
-tested against a fake Aconex. No real Aconex keys yet. See
-[docs/stages/](docs/stages/) for each stage.
+Stage 3: 19 read-only tools for projects, people and the document register,
+behind an audit log, an approved-project list, an off switch and request
+pacing. Tested against a fake Aconex; no real Aconex keys yet. See
+[docs/stages/](docs/stages/) for each stage and [docs/runbook.md](docs/runbook.md)
+for operating it.
 
 ## Run it on your computer
 
