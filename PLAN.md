@@ -64,8 +64,8 @@ Aconex administrator. Feature names below match [docs/features.md](docs/features
 | **6. Files** ✅ (register documents; mail attachments in 7, package and workflow files in 9) | Downloads: documents (choosing PDF or DWG), mail attachments and their markups, package attachments, workflow files. Includes deciding how a file reaches Claude through the connector | Claude reads a real drawing's contents. A file can only be fetched by the person who asked for it |
 | **7. Mail** ✅ | Mail search across the whole project (inbox, sent or everything; filters for sender, sender's company, recipient, type, words), open a mail, its thread, attachments as real files, types, saved searches, what's new | Claude traces the history of an issue across the project's mail on the test project |
 | **8. Drafts** ✅ | Save and update drafts (preview, approve, save) with the person's signature | Person opens the draft and sends it. Aconex shows it came from them |
-| **9. Reviews and packages** | Workflows, workflow files, deliverable reviews, review issues, package reviews, packages | Claude answers "what's overdue for review on this job?" correctly against the test project |
-| **10. Field** | Defects, checklists, daily reports, safety observations, areas and subcontractors (read only) | Claude summarises open defects for an area correctly |
+| **9. Reviews and packages** ⏸ parked: no workflows, reviews or packages on the only project | Workflows, workflow files, deliverable reviews, review issues, package reviews, packages | Claude answers "what's overdue for review on this job?" correctly against the test project |
+| **10. Field** ⏸ parked: Field switched off on the only project | Defects, checklists, daily reports, safety observations, areas and subcontractors (read only) | Claude summarises open defects for an area correctly |
 | **11. Audit trail** | Aconex's company-wide activity log, if we keep it (see open question 1 in features.md) | Only the people allowed to see it can |
 | **12. Pilot and attack test** | Nothing new. One project, a few users, fake "trick" emails | The tricks fail, the log makes sense, pilot users sign off |
 
@@ -75,15 +75,16 @@ document markups.
 **Rule:** the real Aconex key doesn't go onto Fly until sign-in (stage 4) is
 working. Before that, the gateway only talks to a fake Aconex.
 
-**Deferred for testing (decided 2 Nov 2026), must be done before anyone other
-than Lachie uses the gateway or a production key goes in:**
+**Not being done (Lachie's decision, 2 Nov 2026).** These were planned before
+other people use the gateway; they're kept here for the record:
 
 1. Remove the Fly tokens from the Claude build environment, so the session
    that writes code can't also deploy (and so read the Aconex key).
 2. Protect `main` on GitHub so every change needs Lachie's approval before
    GitHub deploys it.
 
-Until then, the Aconex key used is a testing key on a test project.
+3. Replace the testing key (the Rev Radar bot, an organisation admin) with a
+   plain Aconex account holding only the permissions the gateway needs.
 
 ## Video notes
 

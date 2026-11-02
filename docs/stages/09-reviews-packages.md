@@ -23,4 +23,5 @@ empty area, 0 issues, checklists and safety observations. Field lives at
 
 ## Status
 
-Paused until there's real data to build against (decision pending).
+Parked (2 Nov 2026) until a project with workflows, reviews, packages or Field
+data is available. Next up instead: testing on a Claude Enterprise account.
