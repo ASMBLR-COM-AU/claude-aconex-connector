@@ -9,8 +9,9 @@ never sees the keys.
 
 ## Current stage
 
-Stage 1, the skeleton: one test tool (`ping`) and a `/health` page. No Aconex
-access and no secrets.
+Stage 2: 19 read-only tools for projects, people and the document register,
+tested against a fake Aconex. No real Aconex keys yet. See
+[docs/stages/](docs/stages/) for each stage.
 
 ## Run it on your computer
 

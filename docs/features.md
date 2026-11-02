@@ -3,7 +3,7 @@
 What the gateway will let Claude do in Aconex, chosen on 2 November 2026 from
 every feature in Oracle's Aconex API guides (89 features, about 750 API calls).
 
-- **46 need now, 9 later, 34 don't need.**
+- **45 need now, 9 later, 35 don't need** (mark read/unread dropped after review).
 - **Login:** one service account (see PLAN.md).
 - Anything not listed as "Need now" or "Later" is not built. If it's not on
   the gateway's menu, Claude can't do it.
@@ -11,25 +11,16 @@ every feature in Oracle's Aconex API guides (89 features, about 750 API calls).
 Tags: *read only* never changes Aconex. *Changes things* writes to Aconex.
 *Admin permission* means the service account needs an extra Aconex permission.
 
-## Open questions
+## Decisions on the open questions (2 Nov 2026)
 
-These need an answer before the stage that builds them.
-
-1. **Audit trail (stage 11).** Aconex's activity log covers the whole company:
-   every login, document change, mail's To/Cc/Bcc and people's IP addresses.
-   Giving it to every user would bypass the per-person mail filter. Options:
-   only for named admins, or drop it. Oracle also has to switch it on through
-   a service request.
-2. **Mark mail read or unread (stage 7).** Aconex only lets a mail's recipient
-   mark it. With a service account, this would change the service account's
-   own read status, not the person's. Proposal: drop it.
-3. **Confidential mail (stage 7).** The service account can't see a person's
-   confidential mail unless it gets the "view any confidential mail"
-   permission, which would put all confidential mail behind the key.
-   Proposal: accept that confidential mail doesn't show up.
-4. **Project custom fields (stage 2).** The docs say reading them needs the
-   permission to *create* them. Proposal: test whether a read-only account can
-   read them before granting more.
+1. **Audit trail:** admins only, not every user. To be confirmed at stage 11.
+   Oracle has to switch it on through a service request.
+2. **Mark mail read or unread:** dropped. With a service account it would
+   change the service account's own read status, not the person's.
+3. **Confidential mail:** not shown. The service account won't get the
+   "view any confidential mail" permission.
+4. **Project custom fields:** built in stage 2, then tested at stage 5 with a
+   read-only account before granting any extra permission.
 
 ## Things to know
 
@@ -137,11 +128,10 @@ These need an answer before the stage that builds them.
   - API: `POST /api/projects/{id}/mail?is_draft=true`; `POST …/mail/{mailId}/reply?is_draft=true`; `POST …/mail/{mailId}/forward?is_draft=true`
 - **Update a saved draft** (changes things): Change a draft that's already saved, instead of making a new one.
   - API: `ExistingMailId on the draft calls above`
-- **Mark mail read or unread** (changes things): Changes the person's read status (and their unread task count).
-  - API: `PUT …/mail/{mailId}/markRead`; `PUT …/mail/{mailId}/markUnread`
 
 **Don't need**
 
+- **Mark mail read or unread** (changes things): dropped 2 Nov 2026; only works on the service account's own mail.
 - **Fax delivery log** (read only): Whether a mail sent by fax was delivered.
 - **Delete drafts** (changes things, permanent): Permanently delete unsent drafts.
 - **Send, reply or forward mail** (changes things, sends to others): Mail goes straight out to other companies. There's no recall in the API. The design rule so far is that Claude never sends.

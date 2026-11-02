@@ -1,4 +1,4 @@
-"""Stage 1 tests: the skeleton answers, and offers nothing but `ping`."""
+"""Stage 1 tests: the skeleton answers."""
 
 import anyio
 from mcp.client.client import Client
@@ -7,13 +7,13 @@ from starlette.testclient import TestClient
 from gateway.server import build_app, build_server
 
 
-def test_only_ping_is_on_the_menu():
+def test_ping_is_on_the_menu():
     async def run():
         async with Client(build_server()) as client:
             tools = await client.list_tools()
             return [t.name for t in tools.tools]
 
-    assert anyio.run(run) == ["ping"]
+    assert "ping" in anyio.run(run)
 
 
 def test_ping_answers():
