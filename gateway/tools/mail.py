@@ -115,6 +115,7 @@ def parse_mail(root, mail_id: str, attachments_page: int = 1) -> dict:
         "subject": text(root, ".//Subject"),
         "sent": text(root, ".//SentDate"),
         "from": person(root.find(".//FromUserDetails")),
+        "from_user_id": text(root, ".//FromUserDetails/UserId"),
         "to": recipients["TO"],
         "cc": recipients["CC"],
         "bcc": recipients["BCC"],

@@ -26,6 +26,8 @@ STAGE2_TOOLS = {
     # stage 7
     "search_mail", "read_mail", "mail_thread", "mail_fields", "saved_mail_searches",
     "get_mail_attachment",
+    # stage 8
+    "prepare_draft", "save_draft",
 }
 
 
@@ -60,6 +62,9 @@ def test_menu_is_exactly_stage2():
 def test_every_aconex_tool_is_marked_read_only():
     for t in tools():
         if t.name == "ping":
+            continue
+        if t.name == "save_draft":  # the one write (stage 8): marked so Claude asks first
+            assert t.annotations.read_only_hint is False and t.annotations.destructive_hint is False
             continue
         assert t.annotations and t.annotations.read_only_hint is True, t.name
         assert t.annotations.destructive_hint is False, t.name

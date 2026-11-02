@@ -18,12 +18,14 @@ from starlette.responses import JSONResponse
 from gateway.aconex import AconexClient, Settings
 from gateway.guard import AuditLog, Policy, public_url
 from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
-from gateway.tools import Gateway, files, mail, people, register
+from gateway.tools import Gateway, drafts, files, mail, people, register
 
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 
 INSTRUCTIONS = (
-    "Gateway to Oracle Aconex for this company. Every tool only reads. "
+    "Gateway to Oracle Aconex for this company. Every tool only reads, except "
+    "save_draft, which saves an unsent mail draft after the person approves a "
+    "preview from prepare_draft; nothing can be sent. "
     "Find a project's ID with list_projects first. Search narrowly, then widen. "
     "Discipline, type and status values differ per project: copy them from a "
     "result row or from register_fields. When the person asks for a document, a "
@@ -77,6 +79,7 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
     register.register(server, gw)
     links = files.register(server, gw)
     mail.register(server, gw, links)
+    drafts.register(server, gw)
 
     if signin:
         server.custom_route("/auth/callback", methods=["GET"])(signin.callback)

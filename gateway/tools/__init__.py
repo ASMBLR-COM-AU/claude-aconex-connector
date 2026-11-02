@@ -24,6 +24,11 @@ from gateway.guard import UNKNOWN_PERSON, AuditLog, Policy
 READ_ONLY = ToolAnnotations(
     read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=True
 )
+# The one tool that writes to Aconex (stage 8: saving an unsent draft). Marked
+# as a write so Claude asks the person before using it.
+WRITES_DRAFT = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True
+)
 
 SWITCHED_OFF = "The Aconex gateway has been switched off by IT. Nothing was looked up."
 
@@ -46,8 +51,10 @@ def not_approved(project_id: str) -> str:
             "or use list_projects to see the projects that are.")
 
 
-def read_tool(server: MCPServer, gw: Gateway, description: str):
-    """Register a read-only tool behind the gateway's controls."""
+def read_tool(server: MCPServer, gw: Gateway, description: str,
+              annotations: ToolAnnotations = READ_ONLY):
+    """Register a tool behind the gateway's controls (read-only unless told
+    otherwise)."""
 
     def decorate(fn):
         @functools.wraps(fn)
@@ -81,7 +88,7 @@ def read_tool(server: MCPServer, gw: Gateway, description: str):
             audit("ok")
             return result
 
-        server.tool(description=description, annotations=READ_ONLY)(wrapper)
+        server.tool(description=description, annotations=annotations)(wrapper)
         return fn
 
     return decorate

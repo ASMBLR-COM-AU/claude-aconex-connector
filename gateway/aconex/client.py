@@ -1,9 +1,9 @@
 """The gateway's only way to reach Aconex.
 
-Deliberately narrow: it can GET, and it can POST only to search endpoints on
-an allowlist (Aconex runs some searches as POST). There is no general "send
-anything" method, so a tool can't write to Aconex by accident. Later stages
-that need a write (drafts) add one specific, named method for it.
+Deliberately narrow: it can GET, it can POST only to search endpoints on an
+allowlist (Aconex runs some searches as POST), and it has exactly one write:
+`save_draft`, which always asks Aconex for an unsent draft (`is_draft=true`
+is fixed in the code). There is no way to send mail or change anything else.
 
 Everything about login and the live API's quirks is carried over from the
 Aconex skill's script, which was checked against the live API in Oct 2026.
@@ -206,18 +206,21 @@ class AconexClient:
         self._token_expires = time.monotonic() + float(body.get("expires_in", 3600)) - TOKEN_MARGIN_S
 
     async def _send(self, method: str, path: str, params: dict | None, accept: str,
-                    json_body: dict | None = None) -> httpx.Response:
+                    json_body: dict | None = None, content: bytes | None = None,
+                    content_type: str = "", retry_when_busy: bool = True) -> httpx.Response:
         url = self.settings.api_url + path
         logged_in_again = False
-        waits = list(self.settings.throttle_waits)
+        waits = list(self.settings.throttle_waits) if retry_when_busy else []
         while True:
             if self._token is None or time.monotonic() >= self._token_expires:
                 await self._login()
             try:
+                headers = {"Authorization": f"Bearer {self._token}", "Accept": accept}
+                if content_type:
+                    headers["Content-Type"] = content_type
                 async with self._pacer.turn():
                     response = await self._http.request(
-                        method, url, params=params, json=json_body,
-                        headers={"Authorization": f"Bearer {self._token}", "Accept": accept},
+                        method, url, params=params, json=json_body, content=content, headers=headers,
                     )
             except httpx.HTTPError as err:
                 raise AconexError(f"Couldn't reach Aconex ({err}).") from None
@@ -261,6 +264,27 @@ class AconexClient:
         if not any(p.match(path) for p in SEARCH_ONLY_POSTS):
             raise AconexError(f"The gateway doesn't allow POST to {path}.")
         return await self._send("POST", path, None, accept, json_body=body)
+
+    async def save_draft(self, project: str, body: bytes, boundary: str, reply_to: str = "") -> str:
+        """The gateway's only write: save an UNSENT mail draft and return its
+        mail ID. `is_draft=true` is fixed here and there is no way to send: a
+        person opens the draft in Aconex and presses Send. Never repeated when
+        Aconex is busy, so a draft can't be saved twice (live format: the
+        Aconex skill, Oct 2026)."""
+        path = f"/projects/{seg(project, 'project ID')}/mail"
+        if reply_to:
+            path += f"/{seg(reply_to, 'mail ID')}/reply"
+        response = await self._send(
+            "POST", path, {"is_draft": "true"}, "application/vnd.aconex.mail.v2+xml",
+            content=body, content_type=f'multipart/mixed; boundary="{boundary}"',
+            retry_when_busy=False)
+        root = parse_xml(response.content)
+        mail_id = (root.findtext("NewMailId") or "").strip()
+        if root.get("sendStatus") != "Drafted" or not mail_id:
+            raise AconexError(
+                f"Aconex didn't confirm a draft (sendStatus={root.get('sendStatus') or 'none'}). "
+                "Check Mail > Drafts and Mail > Sent in Aconex.")
+        return mail_id
 
     async def aclose(self) -> None:
         await self._http.aclose()

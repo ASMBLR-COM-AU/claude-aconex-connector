@@ -21,6 +21,8 @@ DIRECTORY = b"""<DirectorySearch><SearchResults>
   <Directory><UserId>501</UserId><UserName>Sam Lee</UserName><OrganizationName>Acme Engineers</OrganizationName><JobTitle>Structural Engineer</JobTitle><Email>sam@acme.example</Email></Directory>
   <Directory><UserId>502</UserId><UserName>Jo Park</UserName><OrganizationName>Builder Co</OrganizationName><JobTitle>Site Manager</JobTitle><Email>jo@builder.example</Email></Directory>
   <Directory><UserId>503</UserId><UserName>Sam Ortiz</UserName><TradingName>Builder Co</TradingName><JobTitle>Project Engineer</JobTitle></Directory>
+  <Directory><UserId>601</UserId><UserName>Michael Baysinger</UserName><OrganizationName>LVL Structures Group Pty Ltd</OrganizationName><JobTitle>Project Manager</JobTitle></Directory>
+  <Directory><UserId>505</UserId><UserName>Lachie Barnett</UserName><OrganizationName>ASMBLR</OrganizationName><JobTitle>Director</JobTitle><Email>lachie@asmblr.com.au</Email></Directory>
 </SearchResults></DirectorySearch>"""
 
 PERSON = b"""<UserDetails><UserId>501</UserId><FirstName>Sam</FirstName><LastName>Lee</LastName>
@@ -158,7 +160,7 @@ MAIL_DETAIL = b"""<Mail MailId="m1"><MailNo>LSGP-TRANSMIT-000143</MailNo>
   <CorrespondenceType>Transmittal</CorrespondenceType><Subject>Warrs Project Example</Subject>
   <SentDate>2026-03-15T01:00:00.000Z</SentDate><ReasonForIssue>Issued for Information</ReasonForIssue>
   <ThreadId>t1</ThreadId>
-  <FromUserDetails><Name>Michael Baysinger</Name><OrganizationName>LVL Structures Group Pty Ltd</OrganizationName></FromUserDetails>
+  <FromUserDetails><Name>Michael Baysinger</Name><OrganizationName>LVL Structures Group Pty Ltd</OrganizationName><UserId>601</UserId></FromUserDetails>
   <ToUsers>
     <Recipient><DistributionType>TO</DistributionType><Name>Lachie Barnett</Name><OrganizationName>ASMBLR</OrganizationName><UserId>u1</UserId></Recipient>
     <Recipient><DistributionType>CC</DistributionType><Name>Rev Radar</Name><OrganizationName>ASMBLR</OrganizationName><UserId>u2</UserId></Recipient>
@@ -181,6 +183,24 @@ BIG_MAIL = ("<Mail MailId=\"m3\"><MailNo>LSGP-TRANSMIT-000150</MailNo><MailStatu
             + "".join(f'<RegisteredDocumentAttachment attachmentId="x{i}"><DocumentNo>D-{i}</DocumentNo>'
                       f"<Status>Preliminary</Status></RegisteredDocumentAttachment>" for i in range(120))
             + "</Attachments></Mail>").encode()
+
+
+LACHIE = b"""<UserDetails><UserId>505</UserId><FirstName>Lachie</FirstName><LastName>Barnett</LastName>
+  <Mobile>0410 004 180</Mobile><OrganizationName>ASMBLR</OrganizationName></UserDetails>"""
+
+MAIL_CREATE_SCHEMA = b"""<MailSchema>
+  <SchemaField><Identifier>MailTypeId</Identifier><SchemaValues>
+    <SchemaValue><Id>23</Id><Value>Transmittal</Value></SchemaValue>
+    <SchemaValue><Id>25</Id><Value>General Correspondence</Value></SchemaValue></SchemaValues></SchemaField>
+  <SchemaField><Identifier>ReasonForIssue</Identifier><SchemaValues>
+    <SchemaValue><Id>4</Id><Value>Issued for Information</Value></SchemaValue></SchemaValues></SchemaField>
+</MailSchema>"""
+
+DRAFTED = b'<SendMailResult sendStatus="Drafted"><NewMailId>d1</NewMailId></SendMailResult>'
+SAVED_DRAFT = b"<Mail><MailNo>DRAFT-000001</MailNo></Mail>"
+DRAFTBOX = ('<MailSearch TotalResults="1"><SearchResults>'
+            + _mail_row("d9", "DRAFT-000009", "2026-11-01T01:00:00.000Z", "Old draft", "Rev Radar", "ASMBLR")
+            + "</SearchResults></MailSearch>").encode()
 
 
 class FakeAconex:
@@ -214,7 +234,10 @@ class FakeAconex:
             self.logins += 1
             return httpx.Response(200, json={"access_token": f"token-{self.logins}", "expires_in": 3600})
         path = request.url.path.removeprefix("/api")
-        body = json.loads(request.content) if request.content else None
+        try:
+            body = json.loads(request.content) if request.content else None
+        except ValueError:
+            body = request.content.decode("utf-8", "replace")
         self.calls.append({"method": request.method, "path": path,
                            "params": dict(request.url.params), "json": body})
         if self.reject_next_token:
@@ -222,6 +245,10 @@ class FakeAconex:
             return httpx.Response(401, text="token expired")
         if request.method == "GET" and path == "/projects/1001/register/9001":
             return httpx.Response(200, content=PDF, headers=PDF_HEADERS)
+        if request.method == "POST" and path in ("/projects/1001/mail", "/projects/1001/mail/m1/reply"):
+            return httpx.Response(200, content=DRAFTED, headers={"content-type": "application/xml"})
+        if request.method == "GET" and path == "/projects/1001/mail" and request.url.params.get("mail_box") == "Draftbox":
+            return httpx.Response(200, content=DRAFTBOX, headers={"content-type": "application/xml"})
         if request.method == "GET" and path == "/projects/1001/mail":
             box = request.url.params.get("mail_box")
             query = request.url.params.get("search_query", "")
@@ -238,6 +265,9 @@ class FakeAconex:
             "/projects/1001/mail/t1/thread": MAIL_THREAD,
             "/projects/1001/mail/m2/thread": MAIL_THREAD,
             "/projects/1001/mail/m3": BIG_MAIL,
+            "/projects/1001/mail/schema": MAIL_CREATE_SCHEMA,
+            "/projects/1001/mail/d1": SAVED_DRAFT,
+            "/projects/1001/users/505": LACHIE,
             "/projects/1001/mail/savedSearches": SAVED_SEARCHES,
         }
         if request.method == "GET" and path in mail_routes:
