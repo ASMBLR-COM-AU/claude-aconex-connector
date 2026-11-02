@@ -32,7 +32,7 @@ Staff member ──(work login)──▶ Claude (Team or Enterprise)
 | Key storage | Fly secrets | Encrypted, free, built in. Only the running app can read them; they can't be read back out. Anyone who can deploy to the Fly app could get at them, so only IT gets deploy access |
 | Aconex login | One service account (re-confirmed 2 Nov 2026, after learning Aconex also supports per-person sign-in) | Simpler than per-person logins |
 | Feature scope | [docs/features.md](docs/features.md): 46 features now, 9 later, the rest ruled out | Chosen from every feature in Oracle's Aconex API guides |
-| Mail privacy | Gateway filters mail to what the person is on (From/To/Cc/Bcc) before Claude sees it | Enforced by code, not by asking Claude nicely |
+| Mail scope | Whole project: anyone approved can search all project mail the gateway's account can see (changed 2 Nov 2026; was "only mail the person is on"). Confidential mail stays hidden. Every search and mail opened is logged under the person | Tracing the history of an issue needs everything, not just one person's mail |
 | Rate limit | Gateway queues requests to stay under Aconex's 5 a second, 10 at once | That limit is shared by the whole company |
 | Drafts | Saved by the service account, with the person's signature added. The person opens it and sends from their own account | Nothing is sent without a person pressing Send |
 | Claude plans | Must work on both Team and Enterprise | Both let an owner add a custom connector that members sign into |
@@ -62,7 +62,7 @@ Aconex administrator. Feature names below match [docs/features.md](docs/features
 | **4. Sign-in** ✅ (Team; Enterprise still to try) | Staff sign in through Claude's connector. Only approved people get in | Works on a Team account and an Enterprise account. A non-approved person is refused |
 | **5. Real key** ✅ (testing key, test project) | Service account key goes into Fly secrets, pointed at a **test** Aconex project | Claude finds a real drawing. The key appears nowhere but Fly secrets |
 | **6. Files** ✅ (register documents; mail attachments in 7, package and workflow files in 9) | Downloads: documents (choosing PDF or DWG), mail attachments and their markups, package attachments, workflow files. Includes deciding how a file reaches Claude through the connector | Claude reads a real drawing's contents. A file can only be fetched by the person who asked for it |
-| **7. Mail** | Mail search, open, thread, types, saved searches, what's new: all filtered to the signed-in person | Person A sees their mail. "Show me B's mail" in any wording returns nothing. Bcc, group mail and forwards tested |
+| **7. Mail** | Mail search across the whole project (inbox, sent or everything; filters for sender, sender's company, recipient, type, words), open a mail, its thread, attachments as real files, types, saved searches, what's new | Claude traces the history of an issue across the project's mail on the test project |
 | **8. Drafts** | Save and update drafts (preview, approve, save) with the person's signature | Person opens the draft and sends it. Aconex shows it came from them |
 | **9. Reviews and packages** | Workflows, workflow files, deliverable reviews, review issues, package reviews, packages | Claude answers "what's overdue for review on this job?" correctly against the test project |
 | **10. Field** | Defects, checklists, daily reports, safety observations, areas and subcontractors (read only) | Claude summarises open defects for an area correctly |
