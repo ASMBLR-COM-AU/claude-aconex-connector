@@ -75,6 +75,16 @@ document markups.
 **Rule:** the real Aconex key doesn't go onto Fly until sign-in (stage 4) is
 working. Before that, the gateway only talks to a fake Aconex.
 
+**Deferred for testing (decided 2 Nov 2026), must be done before anyone other
+than Lachie uses the gateway or a production key goes in:**
+
+1. Remove the Fly tokens from the Claude build environment, so the session
+   that writes code can't also deploy (and so read the Aconex key).
+2. Protect `main` on GitHub so every change needs Lachie's approval before
+   GitHub deploys it.
+
+Until then, the Aconex key used is a testing key on a test project.
+
 ## Video notes
 
 - Film each stage's "done when" test as it passes. That's the spine of the video.
