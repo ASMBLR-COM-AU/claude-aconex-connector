@@ -70,7 +70,8 @@ has to look at the real PDF at high resolution, in its own workspace.
 - [x] Tests: by number, by older revision, by ID, another file of the document,
       unknown number explained, unapproved project gets no link, link limits,
       re-checks when used, stored scrambled (11 tests, 89 total).
-- [ ] Live: "get me the PDF of EL-CSH12" in claude.ai puts the file in the chat.
+- [x] Live (2 Nov 2026): "Get me the PDF of EL-CSH12 on 41 Warrs Road" in claude.ai
+      put the file in the chat, and Claude answered questions from it.
 
 ## Scope
 
