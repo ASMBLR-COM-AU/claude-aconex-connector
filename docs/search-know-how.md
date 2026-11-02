@@ -16,9 +16,10 @@ given as a hint when a search comes back empty. Each has a test.
 | **Each project names things differently:** discipline, type and status values | Description, and a hint pointing at `register_fields` | `test_unknown_status_lists_the_real_ones` |
 | **Escape only quotes:** escaping anything else breaks matches | Automatic | `test_quotes_in_search_words_are_escaped` |
 
-To confirm against the real Aconex (stage 5): the exact name of the "Created By"
-field in the register schema, and that the file-content search matches text on
-drawings the way it does in the Aconex website.
+Confirmed against the real Aconex (2 Nov 2026): "Created By" is the search
+field `author` and holds the company name (e.g. "Smart Drafting"); searching
+inside files finds text printed on drawings ("N16" found 214 stair shop
+drawings that have no N16 in their titles).
 
 ## Mail (to build in stage 7)
 

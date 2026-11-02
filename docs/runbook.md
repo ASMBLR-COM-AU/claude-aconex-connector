@@ -106,6 +106,17 @@ An Owner of the Claude Team or Enterprise organisation:
 Claude's settings screens change from time to time; if the wording differs,
 follow Claude's current help for "custom connectors".
 
+## Changing a secret in the Fly dashboard
+
+The dashboard can save a secret as **Staged** without applying it. If the
+secrets list says "Staged", click **Deploy secrets**, or run
+`fly secrets deploy -a aconex-gateway`. The gateway restarts with them.
+
+The Aconex keys can be either `ACONEX_CLIENT_ID` + `ACONEX_CLIENT_SECRET`, or
+the Aconex skill's single combined value in `ACONEX_CREDENTIALS_B64`. When the
+gateway starts, the log line "Aconex keys (shape only)" shows what it found
+(lengths, never the values).
+
 ## Request pacing
 
 Aconex allows 5 requests a second and 10 at once for the whole company. The
