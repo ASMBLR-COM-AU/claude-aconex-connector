@@ -68,7 +68,7 @@ Worked out with Lachie by copying real links from Aconex (2 Nov 2026):
 - The site is `ACONEX_WEB_URL` in `fly.toml` (`https://au1.aconex.com`).
 
 - [x] Live: an inbox link opened the mail (2 Nov 2026).
-- [ ] Live: a saved draft's link opens the draft.
+- [x] Live: a saved draft's link opened the draft (2 Nov 2026).
 
 ## For the video
 
