@@ -49,7 +49,9 @@ The log is kept on an encrypted Fly volume with daily snapshots, kept 5 days.
 
 Edit `ALLOWED_PROJECTS` in `fly.toml` (comma-separated Aconex project IDs),
 then merge the change on GitHub. GitHub deploys it. Projects not on the list
-are refused, and `list_projects` doesn't show them.
+are refused. `list_projects` shows the names of every project the gateway's
+Aconex account can see, each marked approved or not (decided 2 Nov 2026, so
+people can find the project to ask for).
 
 ## Approve a person
 

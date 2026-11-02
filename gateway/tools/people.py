@@ -14,8 +14,10 @@ from gateway.tools import Gateway, clamp, read_tool
 def register(server: MCPServer, gw: Gateway) -> None:
     aconex = gw.aconex
 
-    @read_tool(server, gw, "List the Aconex projects the gateway is approved for, with each project's "
-                       "ID, name and code. Start here to find a project's ID.")
+    @read_tool(server, gw, "List every Aconex project the gateway's account can see, with each "
+                       "project's ID, name, code and whether IT has approved it for the gateway. "
+                       "Only approved projects can be searched or opened. Start here to find a "
+                       "project's ID.")
     async def list_projects() -> dict:
         root = await aconex.get_xml("/projects")
         projects = [
@@ -23,11 +25,16 @@ def register(server: MCPServer, gw: Gateway) -> None:
                 "project_id": text(p, "ProjectId"),
                 "name": text(p, "ProjectName"),
                 "code": first(p, "ProjectCode", "ProjectShortName"),
+                "approved": gw.policy.project_allowed(text(p, "ProjectId")),
             }
             for p in root.iter("Project")
-            if text(p, "ProjectId") and gw.policy.project_allowed(text(p, "ProjectId"))
+            if text(p, "ProjectId")
         ]
-        return {"projects": projects}
+        projects.sort(key=lambda p: (not p["approved"], p["name"].casefold()))
+        result: dict = {"projects": projects}
+        if not any(p["approved"] for p in projects):
+            result["note"] = "No projects are approved yet: ask IT to approve one."
+        return result
 
     @read_tool(server, gw, "Search the people on one project by name, company or job title. "
                        "Matches any part of the text. Leave all filters empty to list everyone.")

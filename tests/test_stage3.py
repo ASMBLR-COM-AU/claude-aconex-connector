@@ -71,15 +71,21 @@ def test_unapproved_project_never_reaches_aconex():
     assert (row["outcome"], row["project"], row["detail"]) == ("blocked", "1002", "project not approved")
 
 
-def test_list_projects_only_shows_approved_ones():
+def test_list_projects_shows_every_name_marked_approved_or_not():
     result, _ = run_tool(FakeAconex(), "list_projects", policy=Policy(frozenset({"1002"})))
-    assert [p["project_id"] for p in data(result)["projects"]] == ["1002"]
+    rows = data(result)["projects"]
+    assert [(p["project_id"], p["approved"]) for p in rows] == [("1002", True), ("1001", False)]
+    assert "note" not in data(result)
 
 
-def test_no_approved_projects_means_none(monkeypatch):
+def test_no_approved_projects_lists_names_but_opens_nothing(monkeypatch):
     monkeypatch.setenv("ALLOWED_PROJECTS", "")
-    result, _ = run_tool(FakeAconex(), "list_projects")
-    assert data(result)["projects"] == []
+    fake = FakeAconex()
+    result, _ = run_tool(fake, "list_projects")
+    assert all(not p["approved"] for p in data(result)["projects"])
+    assert "No projects are approved" in data(result)["note"]
+    blocked, _ = run_tool(fake, "search_register", {"project_id": "1001"})
+    assert blocked.is_error and "isn't switched on" in blocked.content[0].text
 
 
 def test_approved_list_tolerates_spaces(monkeypatch):

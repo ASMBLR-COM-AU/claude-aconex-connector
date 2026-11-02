@@ -129,8 +129,8 @@ def test_bad_id_never_reaches_aconex():
 def test_list_projects():
     _, data = call(FakeAconex(), "list_projects")
     assert data["projects"] == [
-        {"project_id": "1001", "name": "Harbour St Tower", "code": "HST"},
-        {"project_id": "1002", "name": "Riverside Depot", "code": "RSD"},
+        {"project_id": "1001", "name": "Harbour St Tower", "code": "HST", "approved": True},
+        {"project_id": "1002", "name": "Riverside Depot", "code": "RSD", "approved": True},
     ]
 
 
