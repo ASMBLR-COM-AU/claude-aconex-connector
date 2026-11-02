@@ -1,28 +1,23 @@
-"""Stage 6 (experiment): getting a real PDF from Aconex to Claude.
+"""Stage 6: the real file (the PDF, or a DWG on multi-file documents) from
+Aconex to Claude, on command.
 
-Two ways are being tried, as two temporary tools, to see which Claude
-surfaces (claude.ai chat, Desktop, Cowork, Claude Code) accept:
+Why a download link (tested 2 Nov 2026, see docs/stages/06-files.md):
+claude.ai refuses a PDF inside a tool's reply ("application/pdf not
+supported"), and pictures of pages lose too much (drawing notes are often
+drawn as lines, not stored as text). A short-lived link lets Claude's own
+workspace download the original file, show it in the chat and open it. That
+works in claude.ai (once the gateway's address is on the organisation's
+allowed domains, see the runbook), Claude Code and Cowork. Anywhere else, the
+person can click the link.
 
-1. `test_pdf_in_reply`: the PDF itself, inside the tool's reply (an MCP
-   embedded resource). Claude Code saves it as a file and reads it; claude.ai
-   chat has been reported to reject it.
-2. `test_pdf_download_link`: a short-lived link to the PDF. Claude Code and
-   Cowork can fetch it themselves; in claude.ai the person clicks it.
-3. `test_pdf_page_image`: a picture of one page (or a quarter of it, in more
-   detail), since claude.ai accepts images in tool replies but not PDFs.
-
-Whichever works becomes the real tool and these are removed.
-
-Links: each is random, stored as a hash, tied to one document and the person
-who asked, works for 15 minutes and at most 5 downloads, and re-checks the
-off switch, the approved project and the approved person when used.
+Links: each is random, stored as a hash, tied to one file and the person who
+asked, works for 15 minutes and at most 5 downloads, and re-checks the off
+switch, the approved project and the approved person when used.
 """
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import io
 import mimetypes
 import os
 import secrets
@@ -33,53 +28,17 @@ from urllib.parse import quote
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource, ImageContent, TextContent
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 
 from gateway.aconex import AconexError, seg
+from gateway.aconex.parse import lucene_phrase
 from gateway.guard import public_url
 from gateway.tools import Gateway, current_person, read_tool
+from gateway.tools.register import RETURN_FIELDS, parse_documents
 
 LINK_TTL_S = 15 * 60
 LINK_MAX_USES = 5
-
-IMAGE_EDGE_PX = 2000          # longest side of the picture sent to Claude
-PNG_LIMIT_BYTES = 1_500_000   # above this, send a JPEG instead
-PARTS = ("whole", "top-left", "top-right", "bottom-left", "bottom-right")
-
-
-def page_picture(pdf: bytes, page_number: int, part: str) -> tuple[bytes, str, str]:
-    """Render one page (or a quarter of it) as a picture. Returns (image,
-    mime type, description). A quarter is rendered at twice the detail."""
-    import pypdfium2 as pdfium
-
-    try:
-        document = pdfium.PdfDocument(pdf)
-    except pdfium.PdfiumError:
-        raise ToolError("That file isn't a PDF the gateway can draw.") from None
-    pages = len(document)
-    if not 1 <= page_number <= pages:
-        raise ToolError(f"That document has {pages} page(s); ask for page 1 to {pages}.")
-    page = document[page_number - 1]
-    width, height = page.get_size()
-    edge = IMAGE_EDGE_PX * (1 if part == "whole" else 2)
-    image = page.render(scale=edge / max(width, height), grayscale=True).to_pil()
-    if part != "whole":
-        w, h = image.size
-        left = 0 if part.endswith("left") else w // 2
-        top = 0 if part.startswith("top") else h // 2
-        image = image.crop((left, top, left + w // 2 + w % 2, top + h // 2 + h % 2))
-    out = io.BytesIO()
-    image.save(out, "PNG", optimize=True)
-    kind = "image/png"
-    if out.tell() > PNG_LIMIT_BYTES:
-        out = io.BytesIO()
-        image.convert("L").save(out, "JPEG", quality=80)
-        kind = "image/jpeg"
-    data = out.getvalue()
-    return data, kind, (f"page {page_number} of {pages}, {part}, {image.size[0]}x{image.size[1]} px, "
-                        f"{kind.split('/')[1].upper()} {len(data) // 1024} KB")
 
 
 def _hash(value: str) -> str:
@@ -119,7 +78,7 @@ class FileLinks:
         return f"{public_url()}/files/{token}"
 
     async def serve(self, request: Request) -> Response:
-        """GET /files/{token}: the person (or Claude, for them) downloads the file."""
+        """GET /files/{token}: Claude's workspace (or the person) downloads the file."""
         token = request.path_params.get("token", "")
         rows = self._run("SELECT person, project, document, file_name, expires, uses FROM file_links "
                          "WHERE hash = ?", (_hash(token),))
@@ -128,8 +87,9 @@ class FileLinks:
         person, project, document, file_name, _, _ = rows[0]
 
         def audit(outcome: str, detail: str = "") -> None:
-            self.gw.audit.record(person=person, tool="download link used", project=project,
-                                 arguments={"document_id": document}, outcome=outcome, detail=detail)
+            self.gw.audit.record(person=person, tool="file downloaded", project=project,
+                                 arguments={"document_id": document, "file_name": file_name},
+                                 outcome=outcome, detail=detail)
 
         policy = self.gw.policy
         if policy.switched_off or not policy.project_allowed(project) or (
@@ -153,49 +113,60 @@ class FileLinks:
 def register(server: MCPServer, gw: Gateway) -> FileLinks:
     links = FileLinks(gw, os.environ.get("AUDIT_DB", "audit.db"))
 
-    @read_tool(server, gw,
-               "TEST (stage 6 experiment): get a register document's actual file (e.g. the PDF) "
-               "inside this reply. Use a document_id from search_register. file_name picks one "
-               "file of a multi-file document (e.g. the DWG); leave empty for the main file.")
-    async def test_pdf_in_reply(project_id: str, document_id: str, file_name: str = "") -> CallToolResult:
-        project, document = seg(project_id, "project ID"), seg(document_id, "document ID")
-        content, name = await gw.aconex.get_file(
-            document_path(project, document), {"fileName": file_name} if file_name else None)
-        return CallToolResult(content=[
-            TextContent(type="text", text=f"{name} ({len(content) // 1024} KB) from Aconex."),
-            EmbeddedResource(type="resource", resource=BlobResourceContents(
-                uri=f"aconex://projects/{project}/documents/{document}/{quote(name)}",
-                mime_type=mime_type(name),
-                blob=base64.b64encode(content).decode(),
-            )),
-        ])
+    async def find_document(project: str, number: str, revision: str) -> dict:
+        """The register row for a document number: the current revision, or
+        the named one."""
+        params = {
+            "search_query": f'docno:"{lucene_phrase(number)}"',
+            "return_fields": RETURN_FIELDS,
+            "search_type": "PAGED", "page_size": 100, "page_number": 1,
+            "sort_field": "revisiondate", "sort_direction": "desc",
+        }
+        if revision:
+            params["show_document_history"] = "true"
+        root = await gw.aconex.get_xml(f"/projects/{project}/register", params)
+        wanted = number.strip().casefold()
+        rows = [d for d in parse_documents(root) if d["number"].casefold() == wanted]
+        if revision:
+            rows = [d for d in rows if d["revision"].casefold() == revision.strip().casefold()]
+        if not rows:
+            what = f"{number} revision {revision}" if revision else number
+            raise ToolError(f"No document {what} on this project. Check the number with "
+                            "search_register (or revision_history for its revisions).")
+        return rows[0]
 
     @read_tool(server, gw,
-               "TEST (stage 6 experiment): a picture of one page of a register document's PDF, so "
-               "you can look at a drawing. part: whole (the full sheet) or top-left, top-right, "
-               "bottom-left, bottom-right (that quarter, in twice the detail: use it to read small "
-               "text, dimensions and details).")
-    async def test_pdf_page_image(project_id: str, document_id: str, page: int = 1,
-                                  part: str = "whole") -> CallToolResult:
-        if part not in PARTS:
-            raise ToolError("part must be one of: " + ", ".join(PARTS) + ".")
-        project, document = seg(project_id, "project ID"), seg(document_id, "document ID")
-        content, name = await gw.aconex.get_file(document_path(project, document))
-        image, kind, about = page_picture(content, page, part)
-        return CallToolResult(content=[
-            TextContent(type="text", text=f"{name}: {about}."),
-            ImageContent(type="image", data=base64.b64encode(image).decode(), mime_type=kind),
-        ])
-
-    @read_tool(server, gw,
-               "TEST (stage 6 experiment): a link to download a register document's actual file "
-               "(e.g. the PDF). Works for 15 minutes. If you can fetch web addresses, download it "
-               "and open it; otherwise give the link to the person.")
-    async def test_pdf_download_link(project_id: str, document_id: str, file_name: str = "") -> dict:
-        project, document = seg(project_id, "project ID"), seg(document_id, "document ID")
-        url = links.create(current_person(), project, document, file_name.strip())
-        return {"download_url": url, "expires_in_minutes": LINK_TTL_S // 60,
-                "note": "The link downloads the original file from Aconex. It stops working after "
-                        "15 minutes or 5 downloads."}
+               "Get the actual file of a register document (the PDF, or e.g. the DWG with "
+               "file_name) when the person asks for a document, a drawing or 'the PDF', or when you "
+               "need to read a drawing properly. Give document_number (e.g. EL-CSH12) for the "
+               "current revision, plus revision for an older one; or a document_id from a search. "
+               "Returns a download link valid for 15 minutes (5 downloads). Then: download the link "
+               "into your workspace (e.g. curl -L -o \"<file_name>\" \"<download_url>\") and give the "
+               "person the file in the chat; to read it, open the downloaded file and look at it at "
+               "high resolution, since drawing notes are often drawn as lines rather than stored as "
+               "text. If your workspace can't reach the link, give the person the link to click.")
+    async def get_document_file(project_id: str, document_number: str = "", document_id: str = "",
+                                revision: str = "", file_name: str = "") -> dict:
+        project = seg(project_id, "project ID")
+        if bool(document_number.strip()) == bool(document_id.strip()):
+            raise ToolError("Give either document_number or document_id.")
+        if document_id:
+            document = {"document_id": seg(document_id, "document ID"), "number": "", "revision": "",
+                        "title": "", "file": ""}
+        else:
+            document = await find_document(project, document_number, revision)
+            seg(document["document_id"], "document ID")
+        url = links.create(current_person(), project, document["document_id"], file_name.strip())
+        name = file_name.strip() or document["file"]
+        return {
+            "document_number": document["number"],
+            "revision": document["revision"],
+            "title": document["title"],
+            "file_name": name or "(named when downloaded)",
+            "download_url": url,
+            "expires_in_minutes": LINK_TTL_S // 60,
+            "next_step": "Download download_url into your workspace and give the person the file "
+                         "in the chat. If you can't reach it, give them the link to click.",
+        }
 
     return links

@@ -21,8 +21,8 @@ STAGE2_TOOLS = {
     "search_register", "revision_history", "document_details", "register_fields",
     "current_drawing_set_rule", "document_event_log", "document_transmittals",
     "saved_register_searches", "documents_changed_since",
-    # stage 6 experiment (temporary)
-    "test_pdf_in_reply", "test_pdf_download_link", "test_pdf_page_image",
+    # stage 6
+    "get_document_file",
 }
 
 

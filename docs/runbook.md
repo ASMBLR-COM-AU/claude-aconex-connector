@@ -103,6 +103,15 @@ An Owner of the Claude Team or Enterprise organisation:
 3. Each approved person then opens **Settings › Connectors**, finds the
    gateway and clicks **Connect**. They're sent to the company login page.
 
+For Claude in claude.ai to fetch real files (PDFs, DWGs) on command, the Owner
+also sets, under **Admin settings › Capabilities**:
+
+- **Code execution** switched on, and
+- **Network access › allowed domains:** add `aconex-gateway.fly.dev`.
+
+Without these, Claude still finds documents but can only hand the person a
+download link to click. Claude Code and Cowork need neither.
+
 Claude's settings screens change from time to time; if the wording differs,
 follow Claude's current help for "custom connectors".
 

@@ -9,7 +9,8 @@ never sees the keys.
 
 ## Current stage
 
-Stage 4: 19 read-only tools for projects, people and the document register,
+Stage 6: read-only tools for projects, people and the document register, and
+the real files (PDF, DWG) on command,
 behind company sign-in (Google or Microsoft), an audit log, approved projects
 and people, an off switch and request pacing. Tested against a fake Aconex;
 no real Aconex keys yet. See [docs/stages/](docs/stages/) for each stage and
