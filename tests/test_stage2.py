@@ -299,3 +299,59 @@ def test_related_document_changes():
     params = fake.calls[-1]["params"]
     assert params["from"] == "2026-10-01T00:00:00.000Z" and params["to"] == "2026-10-31T00:00:00.000Z"
     assert data["changes"][0]["action"] == "CREATED"
+
+
+# ── search know-how (docs/search-know-how.md) ───────────────────────
+
+def test_door_number_is_found_on_the_drawing_automatically():
+    """A door number isn't in any title, so the plain search finds nothing and
+    the gateway searches the text on the drawings by itself."""
+    fake = FakeAconex()
+    _, data = call(fake, "search_register", {"project_id": "1001", "words": "1DG203"})
+    first, second = fake.calls[-2:]
+    assert "content_search" not in first["params"]
+    assert second["params"]["content_search"] == "true"
+    assert second["params"]["search_query"] == '"1DG203"'
+    assert data["documents"][0]["number"] == "A-2201"
+    assert "inside the files" in data["note"]
+
+
+def test_asking_for_inside_files_directly_searches_once():
+    fake = FakeAconex()
+    _, data = call(fake, "search_register",
+                   {"project_id": "1001", "words": "1DG203", "search_inside_files": True})
+    assert len(fake.calls) == 1 and "note" not in data
+    assert data["documents"][0]["number"] == "A-2201"
+
+
+def test_empty_search_explains_what_to_try():
+    _, data = call(FakeAconex(), "search_register", {"project_id": "1001", "words": "NOTHINGHERE"})
+    assert data["documents"] == []
+    assert any("include_old_revisions" in t for t in data["tips"])
+    assert "inside the files" in data["note"]
+
+
+def test_no_automatic_retry_without_words():
+    fake = FakeAconex()
+    call(fake, "search_register", {"project_id": "1001", "number": "NOTHINGHERE"})
+    assert len(fake.calls) == 1
+
+
+def test_created_by_uses_the_projects_own_field():
+    fake = FakeAconex()
+    call(fake, "search_register", {"project_id": "1001", "created_by": "Acme Engineers"})
+    assert fake.calls[-1]["params"]["search_query"] == 'authororg:"Acme Engineers"'
+
+
+def test_created_by_explains_when_a_project_has_no_such_field():
+    fake = FakeAconex()
+    fake.routes[("GET", "/projects/1001/register/schema")] = (
+        b"<RegisterSchema><SchemaField><Identifier>title</Identifier><Name>Title</Name></SchemaField></RegisterSchema>",)
+    is_error, text = call(fake, "search_register", {"project_id": "1001", "created_by": "Acme"})
+    assert is_error and "no Created By field" in text and "Title" in text
+
+
+def test_search_tool_description_teaches_the_tricks():
+    description = next(t.description for t in tools() if t.name == "search_register")
+    for phrase in ("door number", "search_inside_files", "include_old_revisions", "created_by"):
+        assert phrase in description

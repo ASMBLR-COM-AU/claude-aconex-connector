@@ -72,11 +72,18 @@ find rather than relying on exact names, but each needs a real check:
 - `document_transmittals`: the search body names and the reply
 - `documents_changed_since`: the date format Aconex expects
 - `related_document_changes`: the reply format
-- Inside-file search (`content_search`)
+- Inside-file search (`content_search`) and the "Created By" field's name
+  (see docs/search-know-how.md)
 
 Already checked live by the Aconex skill: login, projects, register search
 (query syntax, paging, sorting, status IDs, history), document details, the
 project directory.
+
+## Added after stage 3: search know-how
+
+Tips from daily Aconex use are now built into `search_register` (automatic
+inside-file search when nothing matches, a `created_by` filter, hints when a
+search is empty). See [docs/search-know-how.md](../search-know-how.md).
 
 ## For the video
 

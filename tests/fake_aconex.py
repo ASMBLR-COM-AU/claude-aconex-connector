@@ -68,7 +68,17 @@ SCHEMA = b"""<RegisterSchema><SearchSchemaFields>
     <SchemaValue><Id>1</Id><Value>Structural</Value></SchemaValue>
   </SchemaValues></SchemaField>
   <SchemaField><Identifier>title</Identifier><Name>Title</Name></SchemaField>
+  <SchemaField><Identifier>authororg</Identifier><Name>Created By</Name></SchemaField>
 </SearchSchemaFields></RegisterSchema>"""
+
+# Only found by searching the text on the drawings (content search).
+DOOR_SCHEDULE = b"""<RegisterSearch TotalResults="1"><SearchResults>
+  <Document DocumentId="9100"><DocumentNumber>A-2201</DocumentNumber><Revision>C</Revision><Title>Level 1 door schedule</Title>
+    <DocumentStatus>For Construction</DocumentStatus><RevisionDate>2026-10-05T00:00:00.000Z</RevisionDate>
+    <Discipline>Architectural</Discipline><DocumentType>Drawing</DocumentType><Filename>A-2201_C.pdf</Filename></Document>
+</SearchResults></RegisterSearch>"""
+
+NO_RESULTS = b"""<RegisterSearch TotalResults="0"><SearchResults/></RegisterSearch>"""
 
 METADATA = b"""<Document DocumentId="9001"><DocumentNumber>S-1100</DocumentNumber><Revision>B</Revision>
   <Author>Sam Lee</Author><ReviewSource>WF-000020</ReviewSource><FileSize>2048000</FileSize></Document>"""
@@ -136,6 +146,11 @@ class FakeAconex:
         if self.reject_next_token:
             self.reject_next_token = False
             return httpx.Response(401, text="token expired")
+        query = request.url.params.get("search_query", "")
+        if path == "/projects/1001/register" and ("1DG203" in query or "NOTHINGHERE" in query):
+            found = "1DG203" in query and request.url.params.get("content_search") == "true"
+            return httpx.Response(200, content=DOOR_SCHEDULE if found else NO_RESULTS,
+                                  headers={"content-type": "application/xml"})
         if path == "/projects/1001/register" and request.url.params.get("show_document_history") == "true":
             return httpx.Response(200, content=HISTORY, headers={"content-type": "application/xml"})
         route = self.routes.get((request.method, path))
