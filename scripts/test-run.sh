@@ -14,6 +14,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# Windows (Git Bash) usually has "python" or "py" rather than "python3".
+PY="$(command -v python3 || command -v python || command -v py)" \
+  || { echo "Install Python 3 first." >&2; exit 2; }
+FLYCTL="$(command -v flyctl || command -v fly)" \
+  || { echo "Install Fly's tool first: https://fly.io/docs/flyctl/install/" >&2; exit 2; }
 FOLDER="${1:-}"
 CONFIG="${FOLDER:+$FOLDER/}fly.toml"
 REPORTS="${FOLDER:-docs/test-runs}"
@@ -25,16 +30,16 @@ FACTS=""
 if [ -n "$FOLDER" ]; then
   [ -f "$FOLDER/testrun.json" ] || { echo "No $FOLDER/testrun.json" >&2; exit 2; }
   grep -q "FILL IN" "$FOLDER/testrun.json" && { echo "Fill in $FOLDER/testrun.json first." >&2; exit 2; }
-  FACTS="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))))' "$FOLDER/testrun.json")"
+  FACTS="$("$PY" -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))))' "$FOLDER/testrun.json")"
 fi
 
-IMAGE=$(flyctl machine list -a "$APP" --json | python3 -c \
+IMAGE=$("$FLYCTL" machine list -a "$APP" --json | "$PY" -c \
   'import json,sys; ms=[m for m in json.load(sys.stdin) if not m["name"].startswith("testrun")]; print(ms[0]["config"]["image"])')
 NAME="testrun-$(date +%s)"
 echo "Image: $IMAGE"
 echo "Starting temporary machine $NAME ..."
 
-ID=$(flyctl machine run "$IMAGE" -a "$APP" --region syd --vm-memory 512 --restart no --rm \
+ID=$("$FLYCTL" machine run "$IMAGE" -a "$APP" --region syd --vm-memory 512 --restart no --rm \
   --name "$NAME" --detach \
   --env PYTHONUNBUFFERED=1 \
   --env ALLOWED_PROJECTS="$(setting ALLOWED_PROJECTS)" \
@@ -49,7 +54,7 @@ echo "Waiting for the test run to finish (machine $ID) ..."
 LOG=$(mktemp)
 for _ in $(seq 1 60); do
   sleep 10
-  flyctl logs -a "$APP" -i "$ID" --no-tail > "$LOG" 2>/dev/null || true
+  "$FLYCTL" logs -a "$APP" -i "$ID" --no-tail > "$LOG" 2>/dev/null || true
   grep -q "TEST RUN:" "$LOG" && break
 done
 
