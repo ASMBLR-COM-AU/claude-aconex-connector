@@ -42,8 +42,9 @@ grep -q "TEST RUN:" "$LOG" || { echo "No result after 10 minutes. Log so far:" >
 
 mkdir -p docs/test-runs
 OUT="docs/test-runs/$(date -u +%Y-%m-%d-%H%M).md"
-# Fly prefixes each log line with time and machine; keep only the report.
-sed -E 's/^.*\] *//' "$LOG" | sed -n '/=====REPORT=====/,/=====END=====/p' | sed '1d;$d' > "$OUT"
+# Fly prefixes each log line with colours, time, machine, region and level
+# ("... app[id] syd [info]"); remove exactly that, then keep only the report.
+sed -E 's/\x1b\[[0-9;]*m//g; s/^[^]]*\] [a-z]+ \[[a-z]+\]//' "$LOG" | sed -n '/=====REPORT=====/,/=====END=====/p' | sed '1d;$d' > "$OUT"
 cp "$OUT" docs/test-runs/latest.md
 cat "$OUT"
 echo

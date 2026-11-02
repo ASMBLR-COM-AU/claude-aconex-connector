@@ -27,7 +27,7 @@ LIVE = os.environ.get("TESTRUN_LIVE_URL", "https://aconex-gateway.fly.dev")
 FACTS = {
     "drawing": "EL-CSH12",           # a drawing with a PDF
     "drawing_title_word": "precast",
-    "words_inside_files": "1DG203",  # a door number only found inside drawings
+    "words_inside_files": "reinforcement",  # printed inside documents, not in their titles
     "person": "Baysinger",           # someone in the project directory
     "company": "ASMBLR",             # the gateway's own company
 }
@@ -162,8 +162,11 @@ def checks(run: Run) -> None:
         data = ok("search_register", {"project_id": p, "words": f["words_inside_files"],
                                       "search_inside_files": True})
         found = rows(data, "documents")
-        must(found, f"no drawing mentions {f['words_inside_files']}")
-        return f"{len(found)} drawings mention it"
+        must(found, f"no document mentions {f['words_inside_files']}")
+        word = f["words_inside_files"].lower()
+        inside = [d for d in found if word not in (d.get("title", "") + d.get("number", "")).lower()]
+        must(inside, "every match had the word in its title, so this didn't prove a search inside files")
+        return f"{data.get('total', len(found))} documents, e.g. {inside[0].get('title', '')[:50]}"
     run.check("register", f"search inside drawings for {f['words_inside_files']}", inside_files)
 
     def fields():
@@ -238,7 +241,8 @@ def checks(run: Run) -> None:
                                     "subject": "Test run preview (never saved)",
                                     "message": "Automated test run. This draft is never saved."})
         must(data.get("preview_code"), "no preview code")
-        return f"to {data.get('to')}; preview only"
+        must("Regards" in data.get("message", ""), "no signature added")
+        return f"to {', '.join(map(str, data.get('to') or []))}; signature added; not saved"
     run.check("drafts", "preview a draft (nothing saved)", preview)
 
     # ── safety
