@@ -22,7 +22,7 @@ from typing import Literal
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from gateway.aconex import seg
+from gateway.aconex import AconexError, seg
 from gateway.aconex.parse import first, html_to_text, lucene_phrase, page_info, person, text
 from gateway.tools import Gateway, clamp, current_person, parse_when, read_tool
 from gateway.tools.files import LINK_TTL_S, FileLinks
@@ -32,6 +32,7 @@ ACCEPT_MAIL = "application/vnd.aconex.mail.v2+xml"
 RETURN_FIELDS = "docno,subject,sentdate,corrtypeid,fromUserDetails"
 BOXES = {"received": ("Inbox",), "sent": ("Sentbox",), "all": ("Inbox", "Sentbox")}
 MAX_BODY_CHARS = 20_000
+ATTACHMENTS_PER_PAGE = 50  # live: one transmittal had thousands of attachments
 ATTACHMENT_KINDS = {
     "RegisteredDocumentAttachment": "register document",
     "LocalFileAttachment": "file",
@@ -92,7 +93,18 @@ def parse_attachment(a) -> dict:
     }
 
 
-def parse_mail(root, mail_id: str) -> dict:
+def _own(root, *names: str) -> str:
+    """A field of the mail itself, not of something inside it (live: a
+    `.//Status` search picked up an attachment's document status)."""
+    for el in (root, root.find("Mail")):
+        if el is not None:
+            value = first(el, *names)
+            if value:
+                return value
+    return ""
+
+
+def parse_mail(root, mail_id: str, attachments_page: int = 1) -> dict:
     body = root.find(".//MailData")
     body_text = html_to_text("".join(body.itertext())) if body is not None else ""
     recipients = parse_recipients(root)
@@ -107,12 +119,21 @@ def parse_mail(root, mail_id: str) -> dict:
         "cc": recipients["CC"],
         "bcc": recipients["BCC"],
         "reason": text(root, ".//ReasonForIssue"),
-        "status": first(root, ".//MailStatus", ".//Status"),
+        "status": _own(root, "MailStatus", "Status"),
         "thread_id": text(root, ".//ThreadId"),
-        "in_reply_to": first(root, ".//InRefToMailNo", ".//InRefToMailId"),
         "body": body_text[:MAX_BODY_CHARS],
-        "attachments": [parse_attachment(a) for a in root.findall(".//Attachments/*")],
     }
+    reply_to = _own(root, "InRefToMailNo")
+    if reply_to and reply_to != mail["number"]:
+        mail["in_reply_to"] = reply_to
+    attachments = root.findall(".//Attachments/*")
+    start = (max(1, attachments_page) - 1) * ATTACHMENTS_PER_PAGE
+    mail["attachment_count"] = len(attachments)
+    mail["attachments"] = [parse_attachment(a) for a in attachments[start:start + ATTACHMENTS_PER_PAGE]]
+    if len(attachments) > start + ATTACHMENTS_PER_PAGE:
+        mail["more_attachments"] = (f"Showing {start + 1}-{start + ATTACHMENTS_PER_PAGE} of "
+                                    f"{len(attachments)}: ask for attachments_page "
+                                    f"{max(1, attachments_page) + 1} for the next {ATTACHMENTS_PER_PAGE}.")
     if len(body_text) > MAX_BODY_CHARS:
         mail["body_cut_short"] = f"{len(body_text) - MAX_BODY_CHARS} more characters not shown"
     return mail
@@ -219,13 +240,16 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
     @read_tool(server, gw,
                "Read one mail in full: sender, To/Cc/Bcc, type, subject, date, status, the message "
                "text and its attachments (with IDs for get_mail_attachment, or a document_id for "
-               "get_document_file when it's a register document). Give mail_number (e.g. "
-               "LSGP-TRANSMIT-000143) or a mail_id from search_mail.")
-    async def read_mail(project_id: str, mail_number: str = "", mail_id: str = "") -> dict:
+               "get_document_file when it's a register document), 50 attachments at a time "
+               "(attachments_page for more). Give mail_number (e.g. LSGP-TRANSMIT-000143) or a "
+               "mail_id from search_mail. A transmittal with thousands of attachments can take "
+               "a minute to load.")
+    async def read_mail(project_id: str, mail_number: str = "", mail_id: str = "",
+                        attachments_page: int = 1) -> dict:
         project = seg(project_id, "project ID")
         found = await mail_id_from(project, mail_id, mail_number)
         root = await aconex.get_xml(f"/projects/{project}/mail/{found}", accept=ACCEPT_MAIL)
-        return parse_mail(root, found)
+        return parse_mail(root, found, attachments_page)
 
     @read_tool(server, gw,
                "The conversation a mail belongs to: the chain of replies and forwards, so you can "
@@ -233,9 +257,17 @@ def register(server: MCPServer, gw: Gateway, links: FileLinks) -> None:
     async def mail_thread(project_id: str, mail_number: str = "", mail_id: str = "") -> dict:
         project = seg(project_id, "project ID")
         found = await mail_id_from(project, mail_id, mail_number)
-        detail = await aconex.get_xml(f"/projects/{project}/mail/{found}", accept=ACCEPT_MAIL)
-        thread_id = seg(text(detail, ".//ThreadId") or found, "thread ID")
-        root = await aconex.get_xml(f"/projects/{project}/mail/{thread_id}/thread", accept=ACCEPT_MAIL)
+        # Ask for the thread by the mail's own ID first: reading the whole mail
+        # to find its thread ID can take a minute on a big transmittal (live).
+        try:
+            root = await aconex.get_xml(f"/projects/{project}/mail/{found}/thread", accept=ACCEPT_MAIL)
+            thread_id = found
+        except AconexError as err:
+            if "HTTP 404" not in str(err):
+                raise
+            detail = await aconex.get_xml(f"/projects/{project}/mail/{found}", accept=ACCEPT_MAIL)
+            thread_id = seg(text(detail, ".//ThreadId") or found, "thread ID")
+            root = await aconex.get_xml(f"/projects/{project}/mail/{thread_id}/thread", accept=ACCEPT_MAIL)
         return {"thread_id": thread_id, "mails": leaf_rows(root, 100)}
 
     @read_tool(server, gw,

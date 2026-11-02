@@ -176,6 +176,13 @@ MAIL_THREAD = b"""<MailThread>
 </MailThread>"""
 
 
+BIG_MAIL = ("<Mail MailId=\"m3\"><MailNo>LSGP-TRANSMIT-000150</MailNo><MailStatus>Outstanding</MailStatus>"
+            "<InRefToMailNo>LSGP-TRANSMIT-000143</InRefToMailNo><Attachments>"
+            + "".join(f'<RegisteredDocumentAttachment attachmentId="x{i}"><DocumentNo>D-{i}</DocumentNo>'
+                      f"<Status>Preliminary</Status></RegisteredDocumentAttachment>" for i in range(120))
+            + "</Attachments></Mail>").encode()
+
+
 class FakeAconex:
     def __init__(self) -> None:
         self.calls: list[dict] = []
@@ -229,6 +236,8 @@ class FakeAconex:
             "/projects/1001/mail/schema/search": MAIL_SCHEMA,
             "/projects/1001/mail/m1": MAIL_DETAIL,
             "/projects/1001/mail/t1/thread": MAIL_THREAD,
+            "/projects/1001/mail/m2/thread": MAIL_THREAD,
+            "/projects/1001/mail/m3": BIG_MAIL,
             "/projects/1001/mail/savedSearches": SAVED_SEARCHES,
         }
         if request.method == "GET" and path in mail_routes:

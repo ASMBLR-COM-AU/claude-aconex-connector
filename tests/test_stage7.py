@@ -152,3 +152,26 @@ def test_bad_attachment_id_never_reaches_aconex():
     is_error, text = call(fake, "get_mail_attachment", {"project_id": "1001", "mail_id": "m1",
                                                         "attachment_id": "../../register/9001"})
     assert is_error and "valid Aconex attachment ID" in text
+
+
+# ── found against the real Aconex (2 Nov 2026) ──────────────────────
+
+def test_big_transmittal_lists_fifty_attachments_at_a_time():
+    _, mail = call(FakeAconex(), "read_mail", {"project_id": "1001", "mail_id": "m3"})
+    assert mail["attachment_count"] == 120 and len(mail["attachments"]) == 50
+    assert "attachments_page 2" in mail["more_attachments"]
+    _, last = call(FakeAconex(), "read_mail", {"project_id": "1001", "mail_id": "m3", "attachments_page": 3})
+    assert [a["number"] for a in last["attachments"]][:1] == ["D-100"] and "more_attachments" not in last
+
+
+def test_status_is_the_mails_not_an_attachments():
+    _, mail = call(FakeAconex(), "read_mail", {"project_id": "1001", "mail_id": "m3"})
+    assert mail["status"] == "Outstanding" and mail["in_reply_to"] == "LSGP-TRANSMIT-000143"
+    _, first = call(FakeAconex(), "read_mail", {"project_id": "1001", "mail_id": "m1"})
+    assert first["status"] == "" and "in_reply_to" not in first
+
+
+def test_thread_is_asked_for_directly_first():
+    fake = FakeAconex()
+    call(fake, "mail_thread", {"project_id": "1001", "mail_id": "m2"})
+    assert [c["path"] for c in fake.calls] == ["/projects/1001/mail/m2/thread"]
