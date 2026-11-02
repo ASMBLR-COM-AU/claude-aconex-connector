@@ -12,6 +12,7 @@ Aconex skill's script, which was checked against the live API in Oct 2026.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import re
 import time
@@ -80,14 +81,39 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        client_id, client_secret = _value("ACONEX_CLIENT_ID"), _value("ACONEX_CLIENT_SECRET")
+        combined = _value("ACONEX_CREDENTIALS_B64") or _value("ACONEX_USERBOUND_CLIENT_CREDENTIALS_B64")
+        if not client_secret:
+            # The Aconex skill's keys can be one base64 value of "client_id:secret",
+            # and it sometimes ends up pasted where the client ID goes.
+            pair = _decode_pair(combined) or _decode_pair(client_id)
+            if pair:
+                client_id, client_secret = pair
         return cls(
-            client_id=os.environ.get("ACONEX_CLIENT_ID", "").strip(),
-            client_secret=os.environ.get("ACONEX_CLIENT_SECRET", "").strip(),
+            client_id=client_id,
+            client_secret=client_secret,
             api_url=os.environ.get("ACONEX_API_URL", "").strip() or DEFAULT_API_URL,
             token_url=os.environ.get("ACONEX_TOKEN_URL", "").strip() or DEFAULT_TOKEN_URL,
             per_second=float(os.environ.get("ACONEX_PER_SECOND", "") or DEFAULT_PER_SECOND),
             at_once=int(os.environ.get("ACONEX_AT_ONCE", "") or DEFAULT_AT_ONCE),
         )
+
+
+def _value(name: str) -> str:
+    """A setting, without surrounding spaces or quotes pasted along with it."""
+    return os.environ.get(name, "").strip().strip("'\"").strip()
+
+
+def _decode_pair(value: str) -> tuple[str, str] | None:
+    """(client_id, secret) from base64 of "client_id:secret", else None."""
+    if not value:
+        return None
+    try:
+        text = base64.b64decode(value + "=" * (-len(value) % 4), validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    client_id, sep, secret = text.partition(":")
+    return (client_id, secret) if sep and client_id and secret else None
 
 
 class Pacer:
@@ -150,8 +176,9 @@ class AconexClient:
             raise AconexError(f"Couldn't reach the Aconex login server ({err}).") from None
         if response.status_code != 200:
             raise AconexError(
-                f"Aconex refused the gateway's login (HTTP {response.status_code}). "
-                "The API client may have been revoked or its secret rotated."
+                f"Aconex refused the gateway's login (HTTP {response.status_code}"
+                f"{_login_reason(response)}). Check the client ID and secret in Fly's "
+                "secrets; the API client may also have been revoked or its secret rotated."
             )
         body = response.json()
         token = body.get("access_token")
@@ -209,6 +236,17 @@ class AconexClient:
 
     async def aclose(self) -> None:
         await self._http.aclose()
+
+
+def _login_reason(response: httpx.Response) -> str:
+    """Aconex's own reason for refusing a login (e.g. invalid_client). It never
+    contains the keys."""
+    try:
+        body = response.json()
+        reason = " ".join(str(body.get(k, "")) for k in ("error", "error_description")).strip()
+    except ValueError:
+        reason = " ".join(response.text.split())
+    return f": {reason[:160]}" if reason else ""
 
 
 def parse_xml(content: bytes) -> ET.Element:

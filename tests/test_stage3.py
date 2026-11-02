@@ -165,3 +165,34 @@ def test_busy_aconex_gives_up_with_a_plain_message():
         assert "busy" in str(err)
     else:
         raise AssertionError("expected an error")
+
+
+# ── reading the Aconex keys (added during stage 5) ──────────────────
+
+def test_keys_accept_the_skills_combined_form_and_stray_quotes(monkeypatch):
+    import base64 as b64
+    combined = b64.b64encode(b"my-client:my-secret").decode()
+    for name, value in [("ACONEX_CREDENTIALS_B64", combined), ("ACONEX_CLIENT_ID", combined)]:
+        monkeypatch.delenv("ACONEX_CLIENT_ID", raising=False)
+        monkeypatch.delenv("ACONEX_CLIENT_SECRET", raising=False)
+        monkeypatch.setenv(name, value)
+        settings = Settings.from_env()
+        assert (settings.client_id, settings.client_secret) == ("my-client", "my-secret"), name
+        monkeypatch.delenv(name)
+    monkeypatch.setenv("ACONEX_CLIENT_ID", ' "my-client" ')
+    monkeypatch.setenv("ACONEX_CLIENT_SECRET", "'my-secret'\n")
+    settings = Settings.from_env()
+    assert (settings.client_id, settings.client_secret) == ("my-client", "my-secret")
+
+
+def test_a_refused_login_passes_on_aconex_reason():
+    def refuse(request):
+        return httpx.Response(400, json={"error": "invalid_client", "error_description": "Client authentication failed"})
+
+    client = AconexClient(Settings("id", "secret"), transport=httpx.MockTransport(refuse))
+    try:
+        anyio.run(client.get_xml, "/projects")
+    except AconexError as err:
+        assert "invalid_client" in str(err) and "secret" not in str(err).split("Check")[0]
+    else:
+        raise AssertionError("expected an error")
