@@ -316,3 +316,12 @@ def test_no_hidden_characters_in_the_gateways_own_files():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             hidden = [hex(ord(c)) for c in line if unicodedata.category(c) in ("Cf", "Zl", "Zp")]
             assert not hidden, f"{path.relative_to(root)}:{number} has hidden characters {hidden}"
+
+
+def test_reads_only_mode_refuses_even_unsent_drafts():
+    from gateway.aconex.client import check_outgoing
+    draft = httpx.Request("POST", API + "/projects/1001/mail?is_draft=true")
+    check_outgoing(draft, Settings("id", "secret"))  # normally allowed
+    with pytest.raises(Refused):
+        check_outgoing(draft, Settings("id", "secret", reads_only=True))
+    check_outgoing(httpx.Request("GET", API + "/projects"), Settings("id", "secret", reads_only=True))

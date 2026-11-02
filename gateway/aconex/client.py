@@ -88,7 +88,7 @@ def check_outgoing(request: httpx.Request, settings: "Settings") -> None:
         return
     if method == "POST" and any(p.match(path) for p in SEARCH_ONLY_POSTS) and not url.query:
         return
-    if (method == "POST" and any(p.match(path) for p in DRAFT_POSTS)
+    if (method == "POST" and any(p.match(path) for p in DRAFT_POSTS) and not settings.reads_only
             and list(url.params.multi_items()) == [("is_draft", "true")]):
         return
     raise Refused(f"The gateway never sends {method} {path} to Aconex (only reads, searches "
@@ -122,6 +122,7 @@ class Settings:
     per_second: float = DEFAULT_PER_SECOND
     at_once: int = DEFAULT_AT_ONCE
     throttle_waits: tuple = THROTTLE_WAITS_S
+    reads_only: bool = False  # test runs: refuse even unsent drafts
 
     @property
     def connected(self) -> bool:
@@ -146,6 +147,7 @@ class Settings:
             token_url=os.environ.get("ACONEX_TOKEN_URL", "").strip() or DEFAULT_TOKEN_URL,
             per_second=float(os.environ.get("ACONEX_PER_SECOND", "") or DEFAULT_PER_SECOND),
             at_once=int(os.environ.get("ACONEX_AT_ONCE", "") or DEFAULT_AT_ONCE),
+            reads_only=_value("ACONEX_READS_ONLY").lower() in ("1", "true", "yes", "on"),
         )
 
 
