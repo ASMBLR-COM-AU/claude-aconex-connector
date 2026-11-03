@@ -21,7 +21,7 @@ from starlette.responses import JSONResponse
 from gateway.aconex import AconexClient, Settings
 from gateway.guard import AuditLog, Policy, public_url
 from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
-from gateway.tools import Gateway, drafts, files, mail, people, register, reports
+from gateway.tools import Gateway, drafts, files, mail, people, register
 
 VERSION = "0.9.2"
 
@@ -83,7 +83,6 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
     links = files.register(server, gw)
     mail.register(server, gw, links)
     drafts.register(server, gw)
-    reports.register(server, gw)
 
     if signin:
         server.custom_route("/auth/callback", methods=["GET"])(signin.callback)
