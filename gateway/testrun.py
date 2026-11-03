@@ -239,6 +239,14 @@ def checks(run: Run) -> None:
         return f"{len(data.get('mail_types', []))} mail types"
     run.check("mail", "mail types", mail_types)
 
+    # ── builder reports
+    def old_drawings():
+        data = ok("subbies_on_old_drawings", {"project_id": p, "max_transmittals": 50})
+        must(data["checked"]["register_documents"] > 0, "read no register documents")
+        return (f"{data['checked']['transmittals_with_drawings']} transmittals checked; "
+                f"{len(data['companies_on_old_drawings'])} companies on old drawings")
+    run.check("reports", "which subbies are on old drawings", old_drawings)
+
     # ── drafts (preview only: nothing is saved)
     def preview():
         data = ok("prepare_draft", {"project_id": p, "to": [f["person"]], "mail_type": "General",

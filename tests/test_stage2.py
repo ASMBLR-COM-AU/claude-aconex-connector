@@ -28,6 +28,8 @@ STAGE2_TOOLS = {
     "get_mail_attachment",
     # stage 8
     "prepare_draft", "save_draft",
+    # builder reports
+    "subbies_on_old_drawings",
 }
 
 
