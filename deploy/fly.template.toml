@@ -18,6 +18,13 @@ primary_region = "{region}"
   SIGNIN_ISSUER = "{issuer}"
   # The company's Aconex website, for "open in Aconex" links.
   ACONEX_WEB_URL = "{aconex_web}"
+  # Aconex's API and token service. The same for every live site; Oracle's Early
+  # Access test site (ea1) has its own.
+  ACONEX_API_URL = "{aconex_api}"
+  ACONEX_TOKEN_URL = "{aconex_token}"
+  # Aconex Field (defects and site issues): "1" adds four read-only Field items
+  # to the menu. "0" leaves them off.
+  ENABLE_FIELD = "{field}"
 
 # Encrypted 1 GB volume for the audit log, with daily snapshots kept 5 days.
 [mounts]

@@ -37,7 +37,13 @@ The Aconex administrator:
 - [ ] Registers a **USERBOUND API client** bound to that user (in Oracle's
       Lobby, under OAuth clients), and notes its **client ID** and **secret**
       somewhere private. *(Exact screen names: confirm with the Aconex admin.)*
-
+<!-- if ea1 -->- [ ] **Early Access (ea1):** all of the above happens on Oracle's Early
+      Access site, not the live one: the user, the project and the API client
+      are made in the **EA Lobby**, and the keys only work on ea1. The
+      connector's settings already point at ea1.
+<!-- end --><!-- if field -->- [ ] **Field:** the connector's user can **see Field issues** on the approved
+      project(s) (read only; it never needs to create or change them).
+<!-- end -->
 ## 2. Sign-in: the company's own login
 <!-- if google -->
 In Google Cloud, with a Google Workspace admin account:
@@ -119,5 +125,8 @@ The Claude Owner, in **Admin settings**:
 
 - **Updates:** the company chooses when. In the gateway's code folder:
   `git pull`, read what changed, run the tests, then step 5 again.
-- **More projects or people:** edit `deploy-{slug}/fly.toml`, then step 5.
+- **Another job:** `python3 scripts/jobs.py deploy-{slug} add <project ID>`, then
+  step 5. The connector's Aconex user must be on that project too.
+  `jobs.py deploy-{slug} list` shows the approved jobs; `remove` takes one off.
+- **More people:** edit `deploy-{slug}/fly.toml`, then step 5.
 - **The audit log, the off switch, rotating keys:** see `docs/runbook.md`.

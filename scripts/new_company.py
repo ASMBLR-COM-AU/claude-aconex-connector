@@ -26,7 +26,12 @@ CHECKLIST = ROOT / "deploy" / "SETUP.template.md"
 GOOGLE = "https://accounts.google.com"
 ACONEX_SITES = {"au1": "Australia", "us1": "United States", "uk1": "United Kingdom",
                 "ca1": "Canada", "mea": "Middle East", "hk1": "Asia (Hong Kong)",
-                "cn1": "China", "ksa1": "Saudi Arabia"}
+                "cn1": "China", "ksa1": "Saudi Arabia", "ea1": "Oracle's Early Access test site"}
+# Every live site shares one API and one token service. Early Access has its own
+# (checked live, 17 Nov 2026: ea1.aconex.com/api and the -ea token service).
+LIVE_API = ("https://api.aconex.com/api", "https://constructionandengineering.oraclecloud.com/auth/token")
+SITE_API = {"ea1": ("https://ea1.aconex.com/api",
+                    "https://constructionandengineering-ea.oraclecloud.com/auth/token")}
 FLY_REGIONS = {"syd": "Sydney", "sin": "Singapore", "lhr": "London", "iad": "Virginia",
                "lax": "Los Angeles", "yyz": "Toronto", "fra": "Frankfurt"}
 
@@ -48,7 +53,7 @@ def split(text: str) -> list[str]:
 
 def settings(company: str, projects: str, emails: str = "", domains: str = "",
              signin: str = "google", tenant: str = "", aconex_site: str = "au1",
-             region: str = "syd", app: str = "") -> dict:
+             region: str = "syd", app: str = "", field: bool = False) -> dict:
     """Checks every answer and returns the values for the template."""
     slug = company.strip().lower()
     if not SLUG.match(slug):
@@ -92,12 +97,15 @@ def settings(company: str, projects: str, emails: str = "", domains: str = "",
     if region not in FLY_REGIONS:
         raise SetupError(f"Fly region: one of {', '.join(FLY_REGIONS)}.")
 
+    api, token = SITE_API.get(aconex_site, LIVE_API)
     return {
         "slug": slug, "app": app, "region": region,
         "projects": ",".join(project_ids), "projects_note": "",
         "emails": ",".join(email_list), "domains": ",".join(domain_list),
         "issuer": issuer, "signin": signin,
-        "aconex_web": f"https://{aconex_site}.aconex.com",
+        "aconex_site": aconex_site, "aconex_web": f"https://{aconex_site}.aconex.com",
+        "aconex_api": api, "aconex_token": token,
+        "field": "1" if field else "0",
         "public_url": f"https://{app}.fly.dev",
     }
 
@@ -108,9 +116,11 @@ def render(values: dict) -> dict[str, str]:
     checklist = CHECKLIST.read_text(encoding="utf-8")
     for key, value in values.items():
         checklist = checklist.replace("{" + key + "}", str(value))
-    signin_steps = "google" if values["signin"] == "google" else "microsoft"
-    checklist = re.sub(r"<!-- if (google|microsoft) -->(.*?)<!-- end -->",
-                       lambda m: m.group(2) if m.group(1) == signin_steps else "",
+    # Steps only some companies need: <!-- if NAME -->...<!-- end -->.
+    shown = {values["signin"], "ea1" if values["aconex_site"] == "ea1" else "live",
+             "field" if values["field"] == "1" else "nofield"}
+    checklist = re.sub(r"<!-- if (\w+) -->(.*?)<!-- end -->",
+                       lambda m: m.group(2) if m.group(1) in shown else "",
                        checklist, flags=re.S)
     facts = {"project": values["projects"].split(",")[0],
              "drawing": "FILL IN: a drawing number on the test project, e.g. A-1001",
@@ -142,7 +152,9 @@ def main() -> int:
             tenant = ask("Microsoft tenant ID") if signin.lower() == "microsoft" else ""
             site = ask(f"Aconex site ({'/'.join(ACONEX_SITES)})", "au1")
             region = ask(f"Fly region ({'/'.join(FLY_REGIONS)})", "syd")
-            values = settings(company, projects, emails, domains, signin, tenant, site, region)
+            field = ask("Does the company use Aconex Field (defects, site issues)? yes/no", "no")
+            values = settings(company, projects, emails, domains, signin, tenant, site, region,
+                              field=field.lower().startswith("y"))
             break
         except SetupError as err:
             print(f"\n  ✗ {err}\n  Let's try again.\n")

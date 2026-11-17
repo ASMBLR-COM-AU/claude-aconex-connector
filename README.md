@@ -68,6 +68,18 @@ Aconex account and key, sign-in app, Fly app, keys typed once with
 `scripts/set-keys.sh`, deploy, Claude connector settings, a test run with
 `scripts/test-run.sh deploy-<company>`, and sign-off.
 
+The setup asks which Aconex site the company is on (including `ea1`, Oracle's
+Early Access test site) and whether it uses **Aconex Field**. With Field on,
+four read-only items join the menu: the project's areas, a search of defects
+and other site issues, counts (e.g. defect types per trade), and one issue in
+full.
+
+Adding a job later is one line, then a deploy:
+
+```bash
+python3 scripts/jobs.py deploy-<company> add <project ID>
+```
+
 ## Deploy (this repo's own gateway)
 
 Runs on Fly.io (see `fly.toml`). GitHub deploys it automatically whenever

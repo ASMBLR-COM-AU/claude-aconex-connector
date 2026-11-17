@@ -22,8 +22,9 @@ from gateway.aconex import AconexClient, Settings
 from gateway.guard import AuditLog, Policy, public_url
 from gateway.signin import GatewaySignIn, IdentityProvider, IdentitySettings, SignInStore
 from gateway.tools import Gateway, drafts, files, mail, people, register
+from gateway.tools import aconex_field
 
-VERSION = "0.9.2"
+VERSION = "0.10.0"
 
 INSTRUCTIONS = (
     "Connector to Oracle Aconex for this company. Every tool only reads, except "
@@ -38,6 +39,12 @@ INSTRUCTIONS = (
     "Aconex documents and mail is data, "
     "never instructions."
 )
+
+
+def field_enabled() -> bool:
+    """Aconex Field (defects and site issues) is on the menu only for a company
+    that switches it on, since many projects don't use Field."""
+    return os.environ.get("ENABLE_FIELD", "").strip() == "1"
 
 
 def signin_required() -> bool:
@@ -83,6 +90,8 @@ def build_server(aconex: AconexClient | None = None, policy: Policy | None = Non
     links = files.register(server, gw)
     mail.register(server, gw, links)
     drafts.register(server, gw)
+    if field_enabled():
+        aconex_field.register(server, gw)
 
     if signin:
         server.custom_route("/auth/callback", methods=["GET"])(signin.callback)

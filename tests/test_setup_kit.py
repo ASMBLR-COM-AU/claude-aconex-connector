@@ -77,3 +77,45 @@ def test_set_keys_sends_values_to_fly_and_never_shows_them(tmp_path):
     assert "secrets import --stage -a smith-app" in (tmp_path / "received.args").read_text()
     for value in ("aconex-secret-123", "signin-secret-456", "aconex-id"):
         assert value not in result.stdout + result.stderr
+
+
+# ── Early Access, Field, and adding jobs ────────────────────────────
+
+import jobs  # noqa: E402
+
+
+def test_live_sites_use_the_live_api_and_ea1_its_own():
+    au = new_company.render(new_company.settings(**GOOD))
+    assert 'ACONEX_API_URL = "https://api.aconex.com/api"' in au["fly.toml"]
+    assert 'ENABLE_FIELD = "0"' in au["fly.toml"]
+    assert "EA Lobby" not in au["SETUP.md"] and "see Field issues" not in au["SETUP.md"]
+    ea = new_company.render(new_company.settings(**GOOD, aconex_site="ea1", field=True))
+    assert 'ACONEX_WEB_URL = "https://ea1.aconex.com"' in ea["fly.toml"]
+    assert 'ACONEX_API_URL = "https://ea1.aconex.com/api"' in ea["fly.toml"]
+    assert 'ACONEX_TOKEN_URL = "https://constructionandengineering-ea.oraclecloud.com/auth/token"' in ea["fly.toml"]
+    assert 'ENABLE_FIELD = "1"' in ea["fly.toml"]
+    assert "EA Lobby" in ea["SETUP.md"] and "see Field issues" in ea["SETUP.md"]
+    assert "<!--" not in ea["SETUP.md"]
+
+
+def test_jobs_add_list_remove(tmp_path, capsys):
+    folder = tmp_path / "deploy-smith"
+    folder.mkdir()
+    files = new_company.render(new_company.settings(**GOOD))
+    (folder / "fly.toml").write_text(files["fly.toml"])
+    assert jobs.main([str(folder), "add", "7654321"]) == 0
+    assert 'ALLOWED_PROJECTS = "1234567,7654321"' in (folder / "fly.toml").read_text()
+    assert "fly deploy" in capsys.readouterr().out
+    assert jobs.main([str(folder), "add", "7654321"]) == 1          # already there
+    assert jobs.main([str(folder), "add", "12; rm -rf"]) == 1       # not a project ID
+    assert jobs.main([str(folder), "remove", "1234567"]) == 0
+    assert 'ALLOWED_PROJECTS = "7654321"' in (folder / "fly.toml").read_text()
+    capsys.readouterr()
+    assert jobs.main([str(folder), "list"]) == 0
+    assert capsys.readouterr().out.strip() == "7654321"
+
+
+def test_jobs_keeps_the_note_after_the_projects(tmp_path):
+    text = (ROOT / "fly.toml").read_text()
+    assert jobs.change(text, "add", "1111111").count("test project") == 1
+    assert 'ALLOWED_PROJECTS = "2013297249,1111111"  #' in jobs.change(text, "add", "1111111")

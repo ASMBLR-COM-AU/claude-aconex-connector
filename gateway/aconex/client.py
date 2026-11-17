@@ -70,7 +70,7 @@ def check_outgoing(request: httpx.Request, settings: "Settings") -> None:
 
     Allowed, and nothing else:
       - the login request to Aconex's sign-in server;
-      - GET (reading);
+      - GET (reading), on the main API and on Aconex Field;
       - POST to a search endpoint on the allowlist;
       - POST that saves a draft, and only with exactly `is_draft=true`.
     So no code in the gateway can send mail, even by mistake."""
@@ -79,6 +79,11 @@ def check_outgoing(request: httpx.Request, settings: "Settings") -> None:
     token_url = httpx.URL(settings.token_url)
     if method == "POST" and (url.scheme, url.host, url.path) == (token_url.scheme, token_url.host, token_url.path):
         return
+    field = httpx.URL(settings.field_base)
+    if (url.scheme, url.host) == (field.scheme, field.host) and url.path.startswith(field.path.rstrip("/") + "/"):
+        if method == "GET":
+            return
+        raise Refused(f"The gateway only reads Aconex Field. Refused {method} {url.path}.")
     api = httpx.URL(settings.api_url)
     base = api.path.rstrip("/")
     if (url.scheme, url.host) != (api.scheme, api.host) or not url.path.startswith(base + "/"):
@@ -123,10 +128,20 @@ class Settings:
     at_once: int = DEFAULT_AT_ONCE
     throttle_waits: tuple = THROTTLE_WAITS_S
     reads_only: bool = False  # test runs: refuse even unsent drafts
+    field_url: str = ""       # Aconex Field's API; empty = on the API's host, at /field-management/api
 
     @property
     def connected(self) -> bool:
         return bool(self.client_id and self.client_secret)
+
+    @property
+    def field_base(self) -> str:
+        """Field lives beside the main API on the same host (live, 17 Nov 2026:
+        api.aconex.com/field-management/api and ea1.aconex.com/field-management/api)."""
+        if self.field_url:
+            return self.field_url.rstrip("/")
+        api = httpx.URL(self.api_url)
+        return f"{api.scheme}://{api.host}/field-management/api"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -145,6 +160,7 @@ class Settings:
             client_secret=client_secret,
             api_url=os.environ.get("ACONEX_API_URL", "").strip() or DEFAULT_API_URL,
             token_url=os.environ.get("ACONEX_TOKEN_URL", "").strip() or DEFAULT_TOKEN_URL,
+            field_url=os.environ.get("ACONEX_FIELD_URL", "").strip(),
             per_second=float(os.environ.get("ACONEX_PER_SECOND", "") or DEFAULT_PER_SECOND),
             at_once=int(os.environ.get("ACONEX_AT_ONCE", "") or DEFAULT_AT_ONCE),
             reads_only=_value("ACONEX_READS_ONLY").lower() in ("1", "true", "yes", "on"),
@@ -261,8 +277,9 @@ class AconexClient:
 
     async def _send(self, method: str, path: str, params: dict | None, accept: str,
                     json_body: dict | None = None, content: bytes | None = None,
-                    content_type: str = "", retry_when_busy: bool = True) -> httpx.Response:
-        url = self.settings.api_url + path
+                    content_type: str = "", retry_when_busy: bool = True,
+                    base: str = "") -> httpx.Response:
+        url = (base or self.settings.api_url) + path
         logged_in_again = False
         waits = list(self.settings.throttle_waits) if retry_when_busy else []
         while True:
@@ -302,6 +319,14 @@ class AconexClient:
             return clean_value(response.json())
         except ValueError:
             raise AconexError("Aconex sent back something that isn't JSON.") from None
+
+    async def get_field_json(self, path: str, params: dict | None = None):
+        """Read from Aconex Field (a separate, JSON-only API beside the main one)."""
+        response = await self._send("GET", path, params, ACCEPT_JSON, base=self.settings.field_base)
+        try:
+            return clean_value(response.json())
+        except ValueError:
+            raise AconexError("Aconex Field sent back something that isn't JSON.") from None
 
     async def get_file(self, path: str, params: dict | None = None,
                        max_bytes: int = 25 * 1024 * 1024) -> tuple[bytes, str]:
